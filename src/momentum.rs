@@ -101,11 +101,3 @@ fn cal_new_velocity_boundary_aware_no_diffusion(
     }
 }
 
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-
-}
