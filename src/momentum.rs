@@ -1,3 +1,6 @@
+use crate::fluid_state::FluidState;
+use crate::pixelgrid::PixelGrid;
+
 /// Compute the upwind product q * F, for some quantity q and boundary flux F.
 /// 
 /// # Arguments
@@ -11,46 +14,53 @@
 /// # Returns
 /// 
 /// the upwind scheme product v dq dt
-fn cal_upwind_vdqdt(fl: f32, fr: f32, q: f32, ql: f32, qr: f32, delta: f32) -> f32 {
+#[inline]
+fn cal_upwind_vdqdt(fl: f32, fr: f32, ql: f32, q: f32, qr: f32, delta: f32) -> f32 {
     let cl : f32 = fl.max(0.0) * ql + fl.min(0.0) * q;
     let cr : f32 = fr.max(0.0) * q + fr.min(0.0) * qr;
     (cl - cr) / delta
 } 
 
-#[test]
-fn test_cal_upwind_vqdt() {
-    let result00 = cal_upwind_vdqdt(0.0, 0.0, 1.0, 1.0, 1.0, 1.0);
-    assert_eq!(result00, 0.0);
-    let result01 = cal_upwind_vdqdt(1.0, 0.0, 1.0, 1.0, 1.0, 1.0);
-    assert_eq!(result01, 1.0);
-}
-
 /// Calculate updated velocity v' = v + dt * dvdt with only convection.
 ///
 /// Upwinding introduces numerical diffusion, and is more stable.
-/// For unrealistic simulation, this could be fine.
+///
+/// # Arguments
+/// 
+/// * `ak` - Index to compute values for
+/// * `dt` - Time delta
+/// * `u` - Array of velocities (x axis)
+/// * `v` - Array of velocities (y axis)
+/// * `boundary` - Boundary mask (0.0 forces no velocity, 1.0 does not impede)
+/// * `newu` - new u velocity array to fill
+/// * `newv` - new v velocity array to fill
+/// * `dx` - x grid spacing
+/// * `dy` - y grid spacing
+/// * `n` - number of columns
+#[inline]
 fn cal_new_velocity_boundary_aware_no_diffusion(
-    aj: usize, dt: f32, u: &mut [f32], v: &mut [f32], boundary: &mut [f32],
-    newu: &mut [f32], newv: &mut [f32], dx: f32, dy: f32, n: usize) {
+    fs: &mut FluidState, pg: &PixelGrid, ak: usize, dt: f32
+) {
 
     // If not boundary adjacent, this is unnecessarily slow.
-    if boundary[aj] == 0.0 { // If boundary in center, bail
-        newu[aj] *= boundary[aj];
-        newv[aj] *= boundary[aj];
+    if fs.boundary[ak] == 0.0 { // If boundary in center, bail
+        fs.newu[ak] *= fs.boundary[ak];
+        fs.newv[ak] *= fs.boundary[ak];
         return;
     }
 
-    let uw = u[aj - 1];
-    let uc = u[aj];
-    let ue = u[aj + 1];
-    let un = u[aj - n];
-    let us = u[aj + n];
+    let uw = fs.u[ak - 1];
+    let uc = fs.u[ak];
+    let ue = fs.u[ak + 1];
+    let un = fs.u[ak - pg.n];
+    let us = fs.u[ak + pg.n];
 
-    let vn = v[aj - n];
-    let vc = v[aj];
-    let vs = v[aj + n];
-    let ve = v[aj + 1];
-    let vw = v[aj - 1];
+    // let vn = fs.v[ak - pg.n];
+    let vc = fs.v[ak];
+    let vn = fs.v[ak - pg.n];
+    let vs = fs.v[ak + pg.n];
+    let ve = fs.v[ak + 1];
+    let vw = fs.v[ak - 1];
 
     let mut flw = (uw + uc) / 2.0;
     let mut fle = (uc + ue) / 2.0;
@@ -59,45 +69,82 @@ fn cal_new_velocity_boundary_aware_no_diffusion(
     // If 0,0 is top left, then u_ii is bottom left of v_ii
     // If 0,0 is top left, then un is v_ij + vij-1
     let mut fln = (vc + vw) / 2.0; // topl + topr = i+1j-1 + i+1j
-    let mut fls = (vs + v[aj + n - 1]) / 2.0; // bl + br = ij-1 + ij
+    let mut fls = (vs + fs.v[ak + pg.n - 1]) / 2.0; // bl + br = ij-1 + ij
 
     // Enforce the boundary.
     // If we have a boundary pixel to the right, then all fluxes east are zero.
     // Likewise, boundary pixel to the left, flux west is zero.
-    flw *= boundary[aj - 1];
-    fle *= boundary[aj + 1];
-    fln *= boundary[aj - n];
-    fls *= boundary[aj + n];
+    flw *= fs.boundary[ak - 1];
+    fle *= fs.boundary[ak + 1];
+    fln *= fs.boundary[ak - pg.n];
+    fls *= fs.boundary[ak + pg.n];
 
-    let ududx = cal_upwind_vdqdt(flw, fle, uc, uw, ue, dx);
-    let vdudy = cal_upwind_vdqdt(fln, fls, uc, un, us, dy);
+    let ududx = cal_upwind_vdqdt(flw, fle, uw, uc, ue, pg.dx);
+    let vdudy = cal_upwind_vdqdt(fln, fls, un, uc, us, pg.dy);
     let dudt = ududx + vdudy;
 
     // Back staggered. For v, interpolate differently.
     flw = (uc + un) / 2.0;
-    fle = (ue + u[aj - n + 1]) / 2.0;
+    fle = (ue + fs.u[ak - pg.n + 1]) / 2.0;
     fln = (vn + vc) / 2.0;
     fls = (vc + vs) / 2.0;
 
-    flw *= boundary[aj - 1];
-    fle *= boundary[aj + 1];
-    fln *= boundary[aj - n];
-    fls *= boundary[aj + n];
+    flw *= fs.boundary[ak - 1];
+    fle *= fs.boundary[ak + 1];
+    fln *= fs.boundary[ak - pg.n];
+    fls *= fs.boundary[ak + pg.n];
 
-    let udvdx = cal_upwind_vdqdt(flw, fle, vc, vw, ve, dx);
-    let vdvdy = cal_upwind_vdqdt(fln, fls, vc, vn, vs, dy);
+    let udvdx = cal_upwind_vdqdt(flw, fle, vw, vc, ve, pg.dx);
+    let vdvdy = cal_upwind_vdqdt(fln, fls, vn, vc, vs, pg.dy);
     let dvdt = udvdx + vdvdy;
 
-    newu[aj] = uc + ( dt * dudt );
-    newv[aj] = vc + ( dt * dvdt );
+    fs.newu[ak] = uc + ( dt * dudt );
+    fs.newv[ak] = vc + ( dt * dvdt );
 
     // If fluid cell is to the right of a boundary, u is zero, due to backstaggering.
     // Same situation for v.
-    if boundary[aj - 1] == 0.0 {
-        newu[aj] *= 0.0;
+    if fs.boundary[ak - 1] == 0.0 {
+        fs.newu[ak] *= 0.0;
     }
-    if boundary[aj - n] == 0.0 {
-        newv[aj] *= 0.0;
+    if fs.boundary[ak - pg.n] == 0.0 {
+        fs.newv[ak] *= 0.0;
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cal_upwind_vqdt() {
+        // Trivial
+        let result00_111 = cal_upwind_vdqdt(0.0, 0.0, 1.0, 1.0, 1.0, 1.0);
+        assert_eq!(result00_111, 0.0);
+        let result10_111 = cal_upwind_vdqdt(1.0, 0.0, 1.0, 1.0, 1.0, 1.0);
+        assert_eq!(result10_111, 1.0);
+        let result01_111 = cal_upwind_vdqdt(0.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+        assert_eq!(result01_111, -1.0);
+        let result01_000 = cal_upwind_vdqdt(0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        assert_eq!(result01_000, 0.0);
+        let result01_001 = cal_upwind_vdqdt(0.0, 1.0, 0.0, 0.0, 1.0, 1.0);
+        assert_eq!(result01_001, 0.0);
+
+        // Slightly less trivial
+        let result10_100 = cal_upwind_vdqdt(1.0, 0.0, 1.0, 0.0, 0.0, 1.0);
+        assert_eq!(result10_100, 1.0);
+        let result11_00m1 = cal_upwind_vdqdt(1.0, 1.0, 0.0, 0.0, -1.0, 1.0);
+        assert_eq!(result11_00m1, 0.0); // yes, zero, flux is 1.0 on rhs, even if qr is -1 (maybe a concentration)
+        let result11_m111 = cal_upwind_vdqdt(1.0, 1.0, -1.0, 1.0, 1.0, 1.0);
+        assert_eq!(result11_m111, -2.0); // yes, -1.0 is transported from left, 1.0 is lost from right
+    }
+
+    #[test]
+    fn test_cal_new_velocity_boundary_aware_no_diffusion() {   
+        let pg = PixelGrid::new(5, 5);  
+        let mut fs = FluidState::new(pg.m, pg.n);   
+        let ak = 2 * pg.n + 2;
+        fs.u[ak] = 1.0;
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak, 1.0);
+        pg.print_data(fs.newu);
+    }
+}
