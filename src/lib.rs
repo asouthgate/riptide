@@ -1,4 +1,4 @@
-mod boundary;
-mod fluid_state;
-mod momentum;
-mod pixelgrid;
+pub mod boundary;
+pub mod fluid_state;
+pub mod momentum;
+pub mod pixelgrid;

@@ -38,7 +38,7 @@ fn cal_upwind_vdqdt(fl: f32, fr: f32, ql: f32, q: f32, qr: f32, delta: f32) -> f
 /// * `dy` - y grid spacing
 /// * `n` - number of columns
 #[inline]
-fn cal_new_velocity_boundary_aware_no_diffusion(
+pub fn cal_new_velocity_boundary_aware_no_diffusion(
     fs: &mut FluidState, pg: &PixelGrid, ak: usize, dt: f32
 ) {
 

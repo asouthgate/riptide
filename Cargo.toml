@@ -2,3 +2,12 @@
 name = "cfd2d"
 version = "0.0.1"
 edition = "2021"
+
+[lib]
+name = "cfd2d"
+path = "src/lib.rs"
+
+[[bin]]
+name = "test_speed"
+path = "src/bin/test_speed.rs"
+
