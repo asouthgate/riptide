@@ -161,6 +161,31 @@ mod tests {
     }
 
     #[test]
+    fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_left() {   
+        let pg = PixelGrid::new(6, 6);  
+        let mut fs = FluidState::new(pg.m, pg.n);   
+        let ak = 2 * pg.n + 4;
+        fs.u[ak] = -1.0;
+
+        // print one step right
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak, 1.0);
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak - 1, 1.0);
+
+        assert_eq!(fs.newu[ak], -0.5);
+        assert_eq!(fs.newu[ak - 1], -0.5);
+
+        fs.swap_vectors();
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak, 1.0);
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak - 1, 1.0);
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak - 2, 1.0);
+        assert_eq!(fs.newu[ak], -0.25);
+        assert_eq!(fs.newu[ak - 1], -0.625);
+        assert_eq!(fs.newu[ak - 2], -0.125);
+
+        assert_eq!(fs.newu[ak] + fs.newu[ak - 1] + fs.newu[ak - 2], -1.0); // conservative
+    }
+
+    #[test]
     fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_down() {   
 
         let pg = PixelGrid::new(6, 6);  
@@ -180,6 +205,32 @@ mod tests {
         assert_eq!(fs.newv[ak + pg.n], 0.625);
         assert_eq!(fs.newv[ak + 2 * pg.n], 0.125);
         assert_eq!(fs.newv[ak] + fs.newv[ak + pg.n] + fs.newv[ak + 2 * pg.n], 1.0); // conservative
+        
+    }
+
+    #[test]
+    fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_up() {   
+
+        let pg = PixelGrid::new(6, 6);  
+        let mut fs = FluidState::new(pg.m, pg.n);   
+        let ak = 4 * pg.n + 2;
+        fs.v[ak] = -1.0;
+
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak, 1.0);
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak - pg.n, 1.0);
+
+        assert_eq!(fs.newv[ak], -0.5);
+        assert_eq!(fs.newv[ak - pg.n], -0.5);
+        fs.swap_vectors();
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak, 1.0);
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak - pg.n, 1.0);
+        cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak - 2 * pg.n, 1.0);
+
+        assert_eq!(fs.newv[ak], -0.25);
+        assert_eq!(fs.newv[ak - pg.n], -0.625);
+        assert_eq!(fs.newv[ak - 2 * pg.n], -0.125);
+        assert_eq!(fs.newv[ak] + fs.newv[ak - pg.n] + fs.newv[ak - 2 * pg.n], -1.0); // conservative
+        
         
     }
 }
