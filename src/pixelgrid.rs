@@ -16,13 +16,13 @@ impl PixelGrid {
             dy: 1.0
         }
     }
-    pub fn print_data(&self, data: Vec<f32>) {
+    pub fn print_data(&self, data: &Vec<f32>) {
         let prec = 3;
         let underscores = "-".repeat(( 2 + prec + 1) * self.n);
         println!("-{}", underscores);
-        for j in 0..self.n {
+        for i in 0..self.m {
             print!("|");
-            for i in 0..self.m {
+            for j in 0..self.n {
                 let f = format!("{:.precision$}", data[i * self.n + j], precision = prec);
                 print!("{}|", f);
             }

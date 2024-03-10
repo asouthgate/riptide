@@ -22,4 +22,9 @@ impl FluidState {
         boundary::initialize_square_boundary(&mut tmp.boundary, m, n);
         tmp
     }
+
+    pub fn swap_vectors(&mut self) {
+        std::mem::swap(&mut self.u, &mut self.newu);
+        std::mem::swap(&mut self.v, &mut self.newv);
+    }
 }
