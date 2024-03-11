@@ -1,24 +1,26 @@
 use cfd2d::pixelgrid::PixelGrid;
 use cfd2d::fluid_state::FluidState;
+use cfd2d::pressure::{JacobiPressureSolver, PressureSolver};
 use cfd2d::momentum::cal_new_velocity_boundary_aware_no_diffusion;
-use std::time::{Instant, Duration};
+use std::time::{Instant};
 
 fn main() {
-    let m = 1024;
-    let n = 1024;
-    let mn = m * n;
+    let m = 512;
+    let n = 512;
     let pg = PixelGrid::new(m, n);
     let mut fs = FluidState::new(pg.m, pg.n);
-    let mut ak = 0;
+    let ps = JacobiPressureSolver {};
+    let mut ak;
     let iterations = 10;
     let start_time = Instant::now(); // Start the timer
-    for it in 1..iterations {
+    for _it in 1..iterations {
         for i in 1..m {
             for j in 1..n {
                 ak = i * n + j;
                 cal_new_velocity_boundary_aware_no_diffusion(&mut fs, &pg, ak, 1.0);
             }
         }
+        ps.solve(&mut fs, &pg, 5);
         fs.swap_vectors();
     }
 

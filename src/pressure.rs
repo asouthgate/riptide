@@ -1,11 +1,11 @@
 use crate::fluid_state::{FluidState, cal_pressure_corrections, cal_div};
 use crate::pixelgrid::PixelGrid;
 
-trait PressureSolver {
+pub trait PressureSolver {
     fn solve(&self, fs: &mut FluidState, pg: &PixelGrid, nits: usize);
 }
 
-struct JacobiPressureSolver {
+pub struct JacobiPressureSolver {
 }
 
 fn cal_lap(
