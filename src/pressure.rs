@@ -1,4 +1,4 @@
-use crate::fluid_state::FluidState;
+use crate::fluid_state::{FluidState, cal_pressure_corrections, cal_div};
 use crate::pixelgrid::PixelGrid;
 
 trait PressureSolver {
@@ -6,53 +6,6 @@ trait PressureSolver {
 }
 
 struct JacobiPressureSolver {
-}
-
-fn cal_div(
-    u: &Vec<f32>, 
-    v: &Vec<f32>,
-    result_div: &mut Vec<f32>,
-    pg: &PixelGrid
-) {
-    for i in 0..pg.m {
-        for j in 0..pg.n {
-            let ak: usize = i * pg.n + j;
-            // let dudx = cal_dwds_right(ak, u, 1, pg.dx);
-            // let dvdy = cal_dwds_right(ak, v, pg.n, pg.dy);
-            let dudx = (u[ak + 1] - u[ak]) / pg.dx;
-            let dvdy = (v[ak + pg.n] - v[ak]) / pg.dy;
-            result_div[ak] =  dudx + dvdy;
-        }
-    }
-}
-
-fn cal_pressure_corrections(
-    fs: &mut FluidState, 
-    pg: &PixelGrid
-) {
-    for i in 0..pg.m {
-        for j in 0..pg.n {
-            let ak: usize = i * pg.n + j;
-
-            let mut is_boundary_x = fs.boundary[ak] == 0.0;
-            let mut is_boundary_y = fs.boundary[ak] == 0.0;
-
-            if ak > 0 {
-                is_boundary_x = is_boundary_x || (fs.boundary[ak-1] == 0.0);
-            }
-            if ak > pg.n {
-                is_boundary_y = is_boundary_y || (fs.boundary[ak-pg.n] == 0.0);
-            }
-            if !is_boundary_x { 
-                // fs.dpdx[ak] = cal_dwds_left(ak, &fs.pressure, 1, pg.dx);
-                fs.dpdx[ak] = (fs.pressure[ak] - fs.pressure[ak - 1]) / pg.dx;
-            }
-            if !is_boundary_y { 
-                // fs.dpdy[ak] = cal_dwds_left(ak, &fs.pressure, pg.n, pg.dy);
-                fs.dpdy[ak] = (fs.pressure[ak] - fs.pressure[ak - pg.n]) / pg.dx;
-            }
-        }
-    }
 }
 
 fn cal_lap(
@@ -66,19 +19,40 @@ fn cal_lap(
 impl PressureSolver for JacobiPressureSolver {
     fn solve(&self, fs: &mut FluidState, pg: &PixelGrid, nits: usize) {
 
-        let mut Liipii: f32;
-        let Lii: f32 = -(2.0/pg.dx) - (2.0/pg.dy); // for an equal spaced grid, never changes
+        let mut liipii: f32;
+        let lii: f32 = - (2.0/pg.dx) - (2.0/pg.dy); // for an equal spaced grid, never changes
 
-        for k in 0..nits {
+        for _k in 0..nits {
             cal_lap(fs, pg);
             for ak in 0..fs.pressure.len() {
-                Liipii = fs.pressure[ak] * Lii;
-                fs.pressure[ak] = fs.boundary[ak] * (fs.divergence[ak] - ( fs.laplacian[ak] - Liipii)) // / Lii, but we do at end;
+                liipii = fs.pressure[ak] * lii;
+                fs.pressure[ak] = fs.boundary[ak] * (fs.divergence[ak] - ( fs.laplacian[ak] - liipii)) / lii // TODO: do do at end;
             }
         }
+    }
+}
 
-        for ak in 0..fs.pressure.len() {
-            fs.pressure[ak] = fs.pressure[ak] / Lii;
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_pressure_solver_simple() {
+        let pg = PixelGrid::new(6, 6);  
+        let mut fs = FluidState::new(pg.m, pg.n);   
+        let ps = JacobiPressureSolver{};
+
+        fs.u[3 * pg.n + 3] = 1.0;
+        pg.print_data(&fs.u);
+        cal_div(&fs.u, &fs.v, &mut fs.divergence, &pg);
+        pg.print_data(&fs.divergence);
+        ps.solve(&mut fs, &pg, 100);
+        pg.print_data(&fs.divergence);
+        pg.print_data(&fs.pressure);
+        fs.apply_corrections();
+        fs.cal_divergence(&pg);
+        pg.print_data(&fs.u);
+        pg.print_data(&fs.v);
+        pg.print_data(&fs.divergence);
+
     }
 }
