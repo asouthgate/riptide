@@ -8,26 +8,6 @@ trait PressureSolver {
 struct JacobiPressureSolver {
 }
 
-#[inline] 
-fn cal_dwds_left(
-    ak: usize,
-    w: &Vec<f32>,
-    arrdelta: usize, // which direction to take the difference
-    d: f32
-) -> f32 {
-    (w[ak] - w[ak - arrdelta]) / d
-}
-
-#[inline] 
-fn cal_dwds_right(
-    ak: usize,
-    w: &Vec<f32>,
-    arrdelta: usize, // which direction to take the difference
-    d: f32
-) -> f32 {
-    (w[ak + arrdelta] - w[ak]) / d
-}
-
 fn cal_div(
     u: &Vec<f32>, 
     v: &Vec<f32>,
@@ -37,8 +17,10 @@ fn cal_div(
     for i in 0..pg.m {
         for j in 0..pg.n {
             let ak: usize = i * pg.n + j;
-            let dudx = cal_dwds_right(ak, u, 1, pg.dx);
-            let dvdy = cal_dwds_right(ak, v, pg.n, pg.dy);
+            // let dudx = cal_dwds_right(ak, u, 1, pg.dx);
+            // let dvdy = cal_dwds_right(ak, v, pg.n, pg.dy);
+            let dudx = (u[ak + 1] - u[ak]) / pg.dx;
+            let dvdy = (v[ak + pg.n] - v[ak]) / pg.dy;
             result_div[ak] =  dudx + dvdy;
         }
     }
@@ -62,10 +44,12 @@ fn cal_pressure_corrections(
                 is_boundary_y = is_boundary_y || (fs.boundary[ak-pg.n] == 0.0);
             }
             if !is_boundary_x { 
-                fs.dpdx[ak] = cal_dwds_left(ak, &fs.pressure, 1, pg.dx);
+                // fs.dpdx[ak] = cal_dwds_left(ak, &fs.pressure, 1, pg.dx);
+                fs.dpdx[ak] = (fs.pressure[ak] - fs.pressure[ak - 1]) / pg.dx;
             }
             if !is_boundary_y { 
-                fs.dpdy[ak] = cal_dwds_left(ak, &fs.pressure, pg.n, pg.dy);
+                // fs.dpdy[ak] = cal_dwds_left(ak, &fs.pressure, pg.n, pg.dy);
+                fs.dpdy[ak] = (fs.pressure[ak] - fs.pressure[ak - pg.n]) / pg.dx;
             }
         }
     }
