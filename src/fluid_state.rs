@@ -1,5 +1,6 @@
 use crate::boundary;
 use crate::pixelgrid::PixelGrid;
+use crate::momentum::cal_new_velocity_boundary_aware_no_diffusion;
 
 pub struct FluidState {
     pub u: Vec<f32>,
@@ -83,6 +84,16 @@ impl FluidState {
     pub fn swap_vectors(&mut self) {
         std::mem::swap(&mut self.u, &mut self.newu);
         std::mem::swap(&mut self.v, &mut self.newv);
+    }
+
+    pub fn momentum_step(&mut self, pg: &PixelGrid, dt: f32) {
+        let mut ak: usize;
+        for i in 1..pg.m {
+            for j in 1..pg.n {
+                ak = i * pg.n + j;
+                cal_new_velocity_boundary_aware_no_diffusion(self, pg, ak, dt);
+            }
+        }
     }
 
     pub fn apply_corrections(&mut self) {
