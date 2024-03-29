@@ -94,6 +94,7 @@ impl FluidState {
                 cal_new_velocity_boundary_aware_no_diffusion(self, pg, ak, dt);
             }
         }
+        self.swap_vectors();
     }
 
     pub fn apply_corrections(&mut self) {
