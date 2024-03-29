@@ -10,4 +10,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "test_speed"
 path = "src/bin/test_speed.rs"
-
