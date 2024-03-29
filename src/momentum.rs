@@ -74,10 +74,10 @@ pub fn cal_new_velocity_boundary_aware_no_diffusion(
     // Enforce the boundary.
     // If we have a boundary pixel to the right, then all fluxes east are zero.
     // Likewise, boundary pixel to the left, flux west is zero.
-    flw *= fs.boundary[ak - 1];
-    fle *= fs.boundary[ak + 1];
-    fln *= fs.boundary[ak - pg.n];
-    fls *= fs.boundary[ak + pg.n];
+//    flw *= fs.boundary[ak - 1];
+//    fle *= fs.boundary[ak + 1];
+//    fln *= fs.boundary[ak - pg.n];
+//    fls *= fs.boundary[ak + pg.n];
 
     let ududx = cal_upwind_vdqdt(flw, fle, uw, uc, ue, pg.dx);
     let vdudy = cal_upwind_vdqdt(fln, fls, un, uc, us, pg.dy);
@@ -89,10 +89,10 @@ pub fn cal_new_velocity_boundary_aware_no_diffusion(
     fln = (vn + vc) / 2.0;
     fls = (vc + vs) / 2.0;
 
-    flw *= fs.boundary[ak - 1];
-    fle *= fs.boundary[ak + 1];
-    fln *= fs.boundary[ak - pg.n];
-    fls *= fs.boundary[ak + pg.n];
+//    flw *= fs.boundary[ak - 1];
+//    fle *= fs.boundary[ak + 1];
+//    fln *= fs.boundary[ak - pg.n];
+//    fls *= fs.boundary[ak + pg.n];
 
     let udvdx = cal_upwind_vdqdt(flw, fle, vw, vc, ve, pg.dx);
     let vdvdy = cal_upwind_vdqdt(fln, fls, vn, vc, vs, pg.dy);
@@ -210,7 +210,6 @@ mod tests {
 
     #[test]
     fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_up() {   
-
         let pg = PixelGrid::new(6, 6);  
         let mut fs = FluidState::new(pg.m, pg.n);   
         let ak = 4 * pg.n + 2;
@@ -229,8 +228,22 @@ mod tests {
         assert_eq!(fs.newv[ak], -0.25);
         assert_eq!(fs.newv[ak - pg.n], -0.625);
         assert_eq!(fs.newv[ak - 2 * pg.n], -0.125);
-        assert_eq!(fs.newv[ak] + fs.newv[ak - pg.n] + fs.newv[ak - 2 * pg.n], -1.0); // conservative
-        
-        
+        assert_eq!(fs.newv[ak] + fs.newv[ak - pg.n] + fs.newv[ak - 2 * pg.n], -1.0); // conservative        
     }
+
+    #[test]
+    fn test_single_pixel_boundary_adjacent_evolution() {
+        let pg = PixelGrid::new(5, 5);
+        let mut fs = FluidState::new(pg.m, pg.n);
+        let ak0 = 2 * pg.n + 3;
+        fs.u[ak0] = 0.8;
+        let mut ak = 0;
+        pg.print_data(&fs.u);
+        for _k in 0..3 {
+            fs.momentum_step(&pg, 1.0);
+            fs.swap_vectors();
+        }
+        assert!(fs.u[ak0] < 0.8);
+    }
+
 }
