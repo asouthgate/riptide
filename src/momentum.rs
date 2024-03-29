@@ -24,19 +24,6 @@ fn cal_upwind_vdqdt(fl: f32, fr: f32, ql: f32, q: f32, qr: f32, delta: f32) -> f
 /// Calculate updated velocity v' = v + dt * dvdt with only convection.
 ///
 /// Upwinding introduces numerical diffusion, and is more stable.
-///
-/// # Arguments
-/// 
-/// * `ak` - Index to compute values for
-/// * `dt` - Time delta
-/// * `u` - Array of velocities (x axis)
-/// * `v` - Array of velocities (y axis)
-/// * `boundary` - Boundary mask (0.0 forces no velocity, 1.0 does not impede)
-/// * `newu` - new u velocity array to fill
-/// * `newv` - new v velocity array to fill
-/// * `dx` - x grid spacing
-/// * `dy` - y grid spacing
-/// * `n` - number of columns
 #[inline]
 pub fn cal_new_velocity_boundary_aware_no_diffusion(
     fs: &mut FluidState, pg: &PixelGrid, ak: usize, dt: f32
@@ -71,14 +58,6 @@ pub fn cal_new_velocity_boundary_aware_no_diffusion(
     let mut fln = (vc + vw) / 2.0; // topl + topr = i+1j-1 + i+1j
     let mut fls = (vs + fs.v[ak + pg.n - 1]) / 2.0; // bl + br = ij-1 + ij
 
-    // Enforce the boundary.
-    // If we have a boundary pixel to the right, then all fluxes east are zero.
-    // Likewise, boundary pixel to the left, flux west is zero.
-//    flw *= fs.boundary[ak - 1];
-//    fle *= fs.boundary[ak + 1];
-//    fln *= fs.boundary[ak - pg.n];
-//    fls *= fs.boundary[ak + pg.n];
-
     let ududx = cal_upwind_vdqdt(flw, fle, uw, uc, ue, pg.dx);
     let vdudy = cal_upwind_vdqdt(fln, fls, un, uc, us, pg.dy);
     let dudt = ududx + vdudy;
@@ -88,11 +67,6 @@ pub fn cal_new_velocity_boundary_aware_no_diffusion(
     fle = (ue + fs.u[ak - pg.n + 1]) / 2.0;
     fln = (vn + vc) / 2.0;
     fls = (vc + vs) / 2.0;
-
-//    flw *= fs.boundary[ak - 1];
-//    fle *= fs.boundary[ak + 1];
-//    fln *= fs.boundary[ak - pg.n];
-//    fls *= fs.boundary[ak + pg.n];
 
     let udvdx = cal_upwind_vdqdt(flw, fle, vw, vc, ve, pg.dx);
     let vdvdy = cal_upwind_vdqdt(fln, fls, vn, vc, vs, pg.dy);
@@ -110,6 +84,36 @@ pub fn cal_new_velocity_boundary_aware_no_diffusion(
         fs.newv[ak] *= 0.0;
     }
 }
+
+/// Calculate updated quantity q' = q + dt * dqdt with only convection.
+#[inline]
+pub fn cal_new_q_boundary_aware_no_diffusion(
+    q: &mut FluidState, fs: &FluidState, pg: &PixelGrid, ak: usize, dt: f32
+) {
+
+    // If not boundary adjacent, this is unnecessarily slow.
+    if fs.boundary[ak] == 0.0 { // If boundary in center, bail
+        q.u[ak] *= fs.boundary[ak];
+        return;
+    }
+
+    let flw = fs.u[ak] * fs.boundary[ak];
+    let fle = fs.u[ak + 1] * fs.boundary[ak + 1];
+    let fln = fs.v[ak] * fs.boundary[ak];
+    let fls = fs.v[ak + pg.n] * fs.boundary[ak + pg.n];
+    let qc = q.u[ak];
+    let qw = q.u[ak-1];
+    let qe = q.u[ak+1];
+    let qs = q.u[ak+pg.n];
+    let qn = q.u[ak-pg.n];
+
+    let Fy = cal_upwind_vdqdt(flw, fle, qw, qc, qe, pg.dy);
+    let Fx = cal_upwind_vdqdt(fln, fls, qn, qc, qs, pg.dx);
+
+    let dqdt = Fx + Fy;
+    q.newu[ak] = qc + dqdt;
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -241,9 +245,26 @@ mod tests {
         pg.print_data(&fs.u);
         for _k in 0..3 {
             fs.momentum_step(&pg, 1.0);
-            fs.swap_vectors();
         }
         assert!(fs.u[ak0] < 0.8);
+    }
+
+    #[test]
+    fn test_q_evolution() {
+        let pg = PixelGrid::new(5, 5);
+        let mut fs = FluidState::new(pg.m, pg.n);
+        let mut q = FluidState::new(pg.m, pg.n); // use q as a fluid state
+        let ak0 = 5 * 2 + 2;
+        fs.u[ak0] = 1.0;
+        fs.u[ak0 + 1] = 1.0;
+        fs.u[ak0 - 1] = 1.0;
+        q.u[ak0] = 1.0;
+        pg.print_data(&q.u);
+
+        q.quantity_step(&fs, &pg, 1.0);
+        pg.print_data(&q.newu);
+        assert!(q.u[ak0 + 1] == 1.0);
+
     }
 
 }
