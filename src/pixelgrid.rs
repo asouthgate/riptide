@@ -41,6 +41,33 @@ impl PixelGrid {
     pub fn sample(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
         data[self.worldxy2ak(x, y) as usize]
     }
+    pub fn sample_bilinear(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
+
+        let xul = x.floor();
+        let yul = y.round();
+        let xur = x.round();
+        let yur = y.round();
+        let xbl = x.floor();
+        let ybl = y.floor();
+        let xbr = x.round();
+        let ybr = y.floor();
+
+        let akul = self.worldxy2ak(xul, yul);
+        let akur = self.worldxy2ak(xur, yur);
+        let akbl = self.worldxy2ak(xbl, ybl);
+        let akbr = self.worldxy2ak(xbr, ybr);
+
+        let dx = x - xbl;
+        let dy = y - ybl;
+
+        let fxy1 = ( data[akbl] * (1.0 - dx) ) + ( data[akbr] * dx );  // recall dx is 1, so we don't divide by width
+        let fxy2 = ( data[akul] * (1.0 - dx) ) + ( data[akur] * dx );  // recall dx is 1, so we don't divide by width
+
+        let fxy = fxy1 * (1.0 - dy) + fxy2 * dy;
+        return fxy;
+
+
+    }
     pub fn worldxy2ak(&self, x: f32, y: f32) -> usize {
         let x_grid = (x - self.x) as usize;
         let y_grid = (y - self.y) as usize;
