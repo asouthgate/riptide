@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_right() {   
         let pg = PixelGrid::new(6, 6);  
-        let mut fs = FluidState::new(pg.m, pg.n);   
+        let mut fs = FluidState::new(&pg);   
         let ak = 2 * pg.n + 2;
         fs.u[ak] = 1.0;
 
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_left() {   
         let pg = PixelGrid::new(6, 6);  
-        let mut fs = FluidState::new(pg.m, pg.n);   
+        let mut fs = FluidState::new(&pg);   
         let ak = 2 * pg.n + 4;
         fs.u[ak] = -1.0;
 
@@ -193,7 +193,7 @@ mod tests {
     fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_down() {   
 
         let pg = PixelGrid::new(6, 6);  
-        let mut fs = FluidState::new(pg.m, pg.n);   
+        let mut fs = FluidState::new(&pg);   
         let ak = 2 * pg.n + 2;
         fs.v[ak] = 1.0;
 
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn test_cal_new_velocity_boundary_aware_no_diffusion_two_steps_up() {   
         let pg = PixelGrid::new(6, 6);  
-        let mut fs = FluidState::new(pg.m, pg.n);   
+        let mut fs = FluidState::new(&pg);   
         let ak = 4 * pg.n + 2;
         fs.v[ak] = -1.0;
 
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn test_single_pixel_boundary_adjacent_evolution() {
         let pg = PixelGrid::new(5, 5);
-        let mut fs = FluidState::new(pg.m, pg.n);
+        let mut fs = FluidState::new(&pg);
         let ak0 = 2 * pg.n + 3;
         fs.u[ak0] = 0.8;
         let mut ak = 0;
@@ -252,8 +252,8 @@ mod tests {
     #[test]
     fn test_q_evolution() {
         let pg = PixelGrid::new(5, 5);
-        let mut fs = FluidState::new(pg.m, pg.n);
-        let mut q = FluidState::new(pg.m, pg.n); // use q as a fluid state
+        let mut fs = FluidState::new(&pg);
+        let mut q = FluidState::new(&pg); // use q as a fluid state
         let ak0 = 5 * 2 + 2;
         fs.u[ak0] = 1.0;
         fs.u[ak0 + 1] = 1.0;

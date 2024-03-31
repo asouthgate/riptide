@@ -7,7 +7,9 @@ pub struct FluidState {
     pub v: Vec<f32>,
     pub newu: Vec<f32>,
     pub newv: Vec<f32>,
-    pub boundary: Vec<f32>,
+    pub boundary: Vec<f32>, // boundary are central pixels; 1 boundary can affect 4 velocities
+    pub boundary_x: Vec<f32>, // whether some x value is boundary adjacent
+    pub boundary_y: Vec<f32>,
     pub divergence: Vec<f32>,
     pub pressure: Vec<f32>, // current estimate of pressure field
     pub dpdx: Vec<f32>, // est. pressure correction in x
@@ -37,33 +39,24 @@ pub fn cal_pressure_corrections(
     fs: &mut FluidState, 
     pg: &PixelGrid
 ) {
+    let mut ak: usize = 0;
+    let mut is_not_boundary_x: f32 = 0.0;
+    let mut is_not_boundary_y: f32 = 0.0;
     for i in 1..pg.m {
         for j in 1..pg.n {
-            let ak: usize = i * pg.n + j;
-
-            let mut is_boundary_x = fs.boundary[ak] == 0.0;
-            let mut is_boundary_y = fs.boundary[ak] == 0.0;
-
-            if ak > 0 {
-                is_boundary_x = is_boundary_x || (fs.boundary[ak-1] == 0.0);
-            }
-            if ak > pg.n {
-                is_boundary_y = is_boundary_y || (fs.boundary[ak-pg.n] == 0.0);
-            }
-            if !is_boundary_x { 
-                fs.dpdx[ak] = (fs.pressure[ak] - fs.pressure[ak - 1]) / pg.dx;
-            }
-            if !is_boundary_y { 
-                fs.dpdy[ak] = (fs.pressure[ak] - fs.pressure[ak - pg.n]) / pg.dx;
-            }
+            ak = i * pg.n + j;
+            is_not_boundary_x = fs.boundary[ak].min(fs.boundary[ak-1]);
+            is_not_boundary_y = fs.boundary[ak].min(fs.boundary[ak-pg.n]);
+            fs.dpdx[ak] = is_not_boundary_x * (fs.pressure[ak] - fs.pressure[ak - 1]) / pg.dx; 
+            fs.dpdy[ak] = is_not_boundary_y * (fs.pressure[ak] - fs.pressure[ak - pg.n]) / pg.dy;
         }
     }
 }
 
 
 impl FluidState {
-    pub fn new(m: usize, n: usize) -> Self {
-        let mn = m * n;
+    pub fn new(pg: &PixelGrid) -> Self {
+        let mn = pg.mn;
         let zeros = vec![0.0; mn];
         let mut tmp = FluidState {
             u: zeros.clone(),
@@ -71,13 +64,15 @@ impl FluidState {
             newu: zeros.clone(),
             newv: zeros.clone(),
             boundary: zeros.clone(),
+            boundary_x: zeros.clone(),
+            boundary_y: zeros.clone(),
             divergence: zeros.clone(),
             pressure: zeros.clone(),
             dpdx: zeros.clone(),
             dpdy: zeros.clone(),
             laplacian: zeros.clone()
         };
-        boundary::initialize_square_boundary(&mut tmp.boundary, m, n);
+        boundary::initialize_square_boundary(&mut tmp, pg);
         tmp
     }
 
@@ -116,6 +111,23 @@ impl FluidState {
 
     pub fn cal_divergence(&mut self, pg: &PixelGrid) {
         cal_div(&self.u, &self.v, &mut self.divergence, pg)
+    }
+
+    pub fn set_boundary(&mut self, pg: &PixelGrid, ak: usize, val: f32) {
+        self.boundary[ak] = val;
+        let j = ak % pg.n;
+        if j > 0 {
+            self.boundary_x[ak] = self.boundary[ak].min(self.boundary[ak-1]);
+        }
+        if j < pg.n - 1 {
+            self.boundary_x[ak + 1] = self.boundary[ak + 1].min(self.boundary[ak]);
+        }
+        if ak > pg.n {
+            self.boundary_y[ak] = self.boundary[ak].min(self.boundary[ak-pg.n]);
+        }
+        if ak < pg.mn - pg.n {
+            self.boundary_y[ak + pg.n] = self.boundary[ak + pg.n].min(self.boundary[ak]);
+        }
     }
 
 }

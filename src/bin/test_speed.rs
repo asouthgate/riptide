@@ -5,12 +5,13 @@ use riptide::momentum::cal_new_velocity_boundary_aware_no_diffusion;
 use std::time::{Duration, Instant};
 
 fn main() {
-    let m = 512;
-    let n = 512;
+    let m = 256;
+    let n = 256;
     let pg = PixelGrid::new(m, n);
-    let mut fs = FluidState::new(pg.m, pg.n);
+    let mut fs = FluidState::new(&pg);
     let ps = JacobiPressureSolver {};
     let iterations = 10;
+    let pressure_iterations = 5;
     let start_time = Instant::now();
     let mut momentum_time = Duration::new(0, 0);
     let mut cal_divergence_time = Duration::new(0, 0);
@@ -27,7 +28,7 @@ fn main() {
         let t2 = Instant::now();
         cal_divergence_time += t2 - t1;
 
-        ps.solve(&mut fs, &pg, 5);
+        ps.solve(&mut fs, &pg, pressure_iterations);
         let t3 = Instant::now();
         pressure_solve_time += t3 - t2;
 
@@ -47,11 +48,13 @@ fn main() {
         momentum_time: {:?},
         cal_divergence_time: {:?},
         pressure_solve_time: {:?},
+        pressure_solve_time per iteration: {:?},
         apply_corrections_time: {:?}
     ", 
     momentum_time / iterations as u32,
     cal_divergence_time / iterations as u32, 
     pressure_solve_time / iterations as u32, 
+    (pressure_solve_time / pressure_iterations as u32) / iterations as u32,
     apply_corrections_time / iterations as u32
     )
 }
