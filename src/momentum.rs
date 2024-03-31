@@ -107,11 +107,11 @@ pub fn cal_new_q_boundary_aware_no_diffusion(
     let qs = q.u[ak+pg.n];
     let qn = q.u[ak-pg.n];
 
-    let Fy = cal_upwind_vdqdt(flw, fle, qw, qc, qe, pg.dy);
-    let Fx = cal_upwind_vdqdt(fln, fls, qn, qc, qs, pg.dx);
+    let fy = cal_upwind_vdqdt(flw, fle, qw, qc, qe, pg.dy);
+    let fx = cal_upwind_vdqdt(fln, fls, qn, qc, qs, pg.dx);
 
-    let dqdt = Fx + Fy;
-    q.newu[ak] = qc + dqdt;
+    let dqdt = fx + fy;
+    q.newu[ak] = qc + dqdt * dt;
 }
 
 
@@ -241,7 +241,6 @@ mod tests {
         let mut fs = FluidState::new(&pg);
         let ak0 = 2 * pg.n + 3;
         fs.u[ak0] = 0.8;
-        let mut ak = 0;
         pg.print_data(&fs.u);
         for _k in 0..3 {
             fs.momentum_step(&pg, 1.0);

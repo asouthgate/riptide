@@ -1,7 +1,6 @@
 use riptide::pixelgrid::PixelGrid;
 use riptide::fluid_state::FluidState;
 use riptide::pressure::{JacobiPressureSolver, PressureSolver};
-use riptide::momentum::cal_new_velocity_boundary_aware_no_diffusion;
 use std::time::{Duration, Instant};
 
 fn main() {

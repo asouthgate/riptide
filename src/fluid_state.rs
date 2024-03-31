@@ -2,6 +2,7 @@ use crate::boundary;
 use crate::pixelgrid::PixelGrid;
 use crate::momentum::{cal_new_velocity_boundary_aware_no_diffusion, cal_new_q_boundary_aware_no_diffusion};
 
+
 pub struct FluidState {
     pub u: Vec<f32>,
     pub v: Vec<f32>,
@@ -39,9 +40,9 @@ pub fn cal_pressure_corrections(
     fs: &mut FluidState, 
     pg: &PixelGrid
 ) {
-    let mut ak: usize = 0;
-    let mut is_not_boundary_x: f32 = 0.0;
-    let mut is_not_boundary_y: f32 = 0.0;
+    let mut ak: usize;
+    let mut is_not_boundary_x: f32;
+    let mut is_not_boundary_y: f32;
     for i in 1..pg.m {
         for j in 1..pg.n {
             ak = i * pg.n + j;
@@ -93,10 +94,9 @@ impl FluidState {
     }
 
     pub fn quantity_step(&mut self, fs: &FluidState, pg: &PixelGrid, dt: f32) {
-        let mut ak: usize;
         for ak in 0..pg.mn { 
             cal_new_q_boundary_aware_no_diffusion(
-                self, &fs, &pg, ak, 1.0
+                self, &fs, &pg, ak, dt
             );
         }
         self.swap_vectors();
