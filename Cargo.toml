@@ -1,10 +1,10 @@
 [package]
-name = "cfd2d"
+name = "riptide"
 version = "0.0.1"
 edition = "2021"
 
 [lib]
-name = "cfd2d"
+name = "riptide"
 path = "src/lib.rs"
 
 [[bin]]

@@ -1,7 +1,7 @@
-use cfd2d::pixelgrid::PixelGrid;
-use cfd2d::fluid_state::FluidState;
-use cfd2d::pressure::{JacobiPressureSolver, PressureSolver};
-use cfd2d::momentum::cal_new_velocity_boundary_aware_no_diffusion;
+use riptide::pixelgrid::PixelGrid;
+use riptide::fluid_state::FluidState;
+use riptide::pressure::{JacobiPressureSolver, PressureSolver};
+use riptide::momentum::cal_new_velocity_boundary_aware_no_diffusion;
 use std::time::{Instant};
 
 fn main() {
