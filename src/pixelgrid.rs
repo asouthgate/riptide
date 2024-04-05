@@ -20,10 +20,25 @@ impl PixelGrid {
             dy: 1.0,
             x: 0.0,
             y: 0.0,
-            w: 1.0 * _n as f32,
-            h: 1.0 * _m as f32
+            w: _n as f32,
+            h: _m as f32
         }
     }
+
+    pub fn new_with_deltas(_m: usize, _n: usize, _dx: f32, _dy: f32) -> Self {
+        PixelGrid {
+            m: _m,
+            n: _n,
+            mn: _m * _n,
+            dx: _dx,
+            dy: _dy,
+            x: 0.0,
+            y: 0.0,
+            w: _dx * _n as f32,
+            h: _dy * _m as f32
+        }
+    }
+
     pub fn print_data(&self, data: &Vec<f32>) {
         let prec = 3;
         let underscores = "-".repeat(( 2 + prec + 1) * self.n);
@@ -38,24 +53,30 @@ impl PixelGrid {
         }
         println!("-{}", underscores);
     }
-    pub fn sample(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
-        data[self.worldxy2ak(x, y) as usize]
-    }
-    pub fn sample_bilinear(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
 
+    pub fn sample_world(&self, data: &Vec<f32>, wx: f32, wy: f32) -> f32 {
+        let (x, y) = self.worldxy2xy(wx, wy);
+        self.sample(data, x, y)
+    }
+
+    pub fn sample(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
+        data[self.xy2ak(x, y)]
+    }
+
+    pub fn sample_bilinear(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
         let xul = x.floor();
-        let yul = y.round();
-        let xur = x.round();
-        let yur = y.round();
+        let yul = y.floor() + 1.0;
+        let xur = x.floor() + 1.0;
+        let yur = y.floor() + 1.0;
         let xbl = x.floor();
         let ybl = y.floor();
-        let xbr = x.round();
+        let xbr = x.floor() + 1.0;
         let ybr = y.floor();
 
-        let akul = self.worldxy2ak(xul, yul);
-        let akur = self.worldxy2ak(xur, yur);
-        let akbl = self.worldxy2ak(xbl, ybl);
-        let akbr = self.worldxy2ak(xbr, ybr);
+        let akul = self.xy2ak(xul, yul);
+        let akur = self.xy2ak(xur, yur);
+        let akbl = self.xy2ak(xbl, ybl);
+        let akbr = self.xy2ak(xbr, ybr);
 
         let dx = x - xbl;
         let dy = y - ybl;
@@ -65,17 +86,76 @@ impl PixelGrid {
 
         let fxy = fxy1 * (1.0 - dy) + fxy2 * dy;
         return fxy;
-
-
     }
-    pub fn worldxy2ak(&self, x: f32, y: f32) -> usize {
-        let x_grid = (x - self.x) as usize;
-        let y_grid = (y - self.y) as usize;
-//        let x_rel = self.n * x_grid / self.w;
-//        let y_rel = self.m * y_grid / self.h;
-//        let ak = y_rel * self.n as f32 + x_rel; 
-        let ak = y_grid * self.n + x_grid;
-        //println!("{} {} => {} {} => {}", x_grid, y_grid, x_rel, y_rel, ak);
-        ak 
+
+    pub fn sample_bilinear_world(&self, data: &Vec<f32>, wx: f32, wy: f32) -> f32 {
+        let (x, y) = self.worldxy2xy(wx, wy);
+        self.sample_bilinear(data, x, y)
     }
+
+    pub fn xy2ij(&self, x: f32, y:f32) -> Option<(usize, usize)> {
+        match (x, y) {
+            (x, _) if (x > self.n as f32 || x < 0.0) => None,
+            (_, y) if (y > self.m as f32 || y < 0.0) => None,
+            _ => {
+                Some((y as usize, x as usize))
+            }
+        }
+    }
+
+    pub fn ij2ak_nocheck(&self, i: usize, j: usize) -> usize {
+        i * self.n + j
+    }
+
+    pub fn xy2ak(&self, x: f32, y:f32) -> usize {
+        let (i, j) = self.xy2ij(x, y).unwrap();
+        self.ij2ak_nocheck(i, j)
+    }
+
+    pub fn worldxy2xy(&self, wx: f32, wy: f32) -> (f32, f32) {
+        let x_grid = wx - self.x;
+        let y_grid = wy - self.y;
+        let x = x_grid / self.dx;
+        let y = y_grid / self.dy;
+        (x, y)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_xy2ij_oob() {
+        let pg = PixelGrid::new(100, 100);
+        let mut result: Option<(usize, usize)> = pg.xy2ij(120.0, 90.0);
+        assert_eq!(result, None);
+        result = pg.xy2ij(90.0, 101.0);
+        assert_eq!(result, None);
+        result = pg.xy2ij(-101.0, 90.0);
+        assert_eq!(result, None);
+        result = pg.xy2ij(-101.0, -900.0);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_worldxy2xy_noscaling() {
+        let pg = PixelGrid::new(100, 100);
+        let (mut x, mut y) = pg.worldxy2xy(90.0, 80.0);
+        assert_eq!((x, y), (90.0, 80.0));
+        (x, y) = pg.worldxy2xy(-90.0, 80.0);
+        assert_eq!((x, y), (-90.0, 80.0));
+        (x, y) = pg.worldxy2xy(-90.0, -80.0);
+        assert_eq!((x, y), (-90.0, -80.0));
+   }
+
+   #[test]
+    fn test_worldxy2xy_scaling() {
+        let pg = PixelGrid::new_with_deltas(100, 100, 0.5, 0.5);
+        let (mut x, mut y) = pg.worldxy2xy(100.0, 100.0);
+        assert_eq!((x, y), (200.0, 200.0));
+        (x, y) = pg.worldxy2xy(-100.0, -100.0);
+        assert_eq!((x, y), (-200.0, -200.0));
+    }
+
 }

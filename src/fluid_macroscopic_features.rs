@@ -17,7 +17,7 @@ pub fn add_random_wavey_noise(
     let mut rng = rand::thread_rng();
     let mut remaining_u = total_velocity_x / 2.0;
     let mut remaining_v = total_velocity_y / 2.0;
-    for pt in 0..n_points {
+    for _pt in 0..n_points {
         let rand_i = rng.gen_range(0..pg.m as i32) as usize;
         let rand_j = rng.gen_range(0..pg.n as i32) as usize;
         let ak = rand_i + pg.m + rand_j;

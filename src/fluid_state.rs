@@ -233,12 +233,4 @@ mod tests {
         assert!(fs.u[ak+1] > -0.001);
         assert!(fs.v[ak+1] < 0.001);
     }
-
-    #[test]
-    fn test_evolve_particle() {
-        let pg = PixelGrid::new(10, 10);  
-        let mut fs = FluidState::new(&pg);
-
-    }
-
 }
