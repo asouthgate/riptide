@@ -3,6 +3,9 @@ name = "riptide"
 version = "0.0.1"
 edition = "2021"
 
+[dependencies]
+rand = "0.8.4"
+
 [lib]
 name = "riptide"
 path = "src/lib.rs"

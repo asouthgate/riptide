@@ -1,8 +1,47 @@
 use crate::pixelgrid::PixelGrid;
 use crate::fluid_state::FluidState;
+use rand::prelude::*;
 
-pub fn add_wave(i: usize, j: usize, length: usize, u: f32, v: f32, fs: &mut FluidState, pg: &PixelGrid) {
+// Add wavey noise to random pixels.
+//
+// For half of the total velocity specified,
+// apportion uniformly. For the other half,
+// apportion via a random stick-breaking process.
+pub fn add_random_wavey_noise(
+    total_velocity_x: f32,
+    total_velocity_y: f32,
+    n_points: usize,
+    fs: &mut FluidState,
+    pg: &PixelGrid
+) {
+    let mut rng = rand::thread_rng();
+    let mut remaining_u = total_velocity_x / 2.0;
+    let mut remaining_v = total_velocity_y / 2.0;
+    for pt in 0..n_points {
+        let rand_i = rng.gen_range(0..pg.m as i32) as usize;
+        let rand_j = rng.gen_range(0..pg.n as i32) as usize;
+        let ak = rand_i + pg.m + rand_j;
+        fs.u[ak] += total_velocity_x * 0.5 / n_points as f32;
+        fs.v[ak] += total_velocity_y * 0.5 / n_points as f32;
+        let du = rng.gen_range(0.0..remaining_u);
+        let dv = rng.gen_range(0.0..remaining_v);
+        remaining_u -= du;
+        remaining_v -= dv;
+        fs.u[ak] += du;
+        fs.v[ak] += dv;
+    }
+}
 
+
+pub fn add_wave(
+    i: usize,
+    j: usize,
+    length: usize,
+    u: f32,
+    v: f32,
+    fs: &mut FluidState,
+    pg: &PixelGrid
+) {
     let norm = ( u.powf(2.0) + v.powf(2.0) ).powf(0.5);
     let vnorm = v/norm;
     let unorm = u/norm;

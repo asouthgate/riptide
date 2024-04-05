@@ -4,15 +4,16 @@ use riptide::pressure::{JacobiPressureSolver, PressureSolver};
 use std::time::{Duration, Instant};
 
 fn main() {
-    let m = 256;
+    let m = 144;
     let n = 256;
     let pg = PixelGrid::new(m, n);
     let mut fs = FluidState::new(&pg);
     let ps = JacobiPressureSolver {};
     let iterations = 10;
-    let pressure_iterations = 5;
+    let pressure_iterations = 2;
     let start_time = Instant::now();
     let mut momentum_time = Duration::new(0, 0);
+    let mut limit_and_cool_time = Duration::new(0, 0);
     let mut cal_divergence_time = Duration::new(0, 0);
     let mut pressure_solve_time = Duration::new(0, 0);
     let mut apply_corrections_time = Duration::new(0, 0);
@@ -23,17 +24,22 @@ fn main() {
         let t1 = Instant::now();
         momentum_time += t1 - t0;
 
-        fs.cal_divergence(&pg);
+        fs.limit(&pg, 1.0);
+        fs.cool(&pg, 0.1, 0.1, 1.0);
         let t2 = Instant::now();
-        cal_divergence_time += t2 - t1;
+        limit_and_cool_time += t2 - t1;
+
+        fs.cal_divergence(&pg);
+        let t3 = Instant::now();
+        cal_divergence_time += t3 - t2;
 
         ps.solve(&mut fs, &pg, pressure_iterations);
-        let t3 = Instant::now();
-        pressure_solve_time += t3 - t2;
+        let t4 = Instant::now();
+        pressure_solve_time += t4 - t3;
 
         fs.apply_corrections();
-        let t4 = Instant::now();
-        apply_corrections_time += t4 - t3;
+        let t5 = Instant::now();
+        apply_corrections_time += t5 - t4;
     }
 
     let end_time = Instant::now();
@@ -45,12 +51,14 @@ fn main() {
     println!("Average time per iteration: {:?}", avg_time_per_iteration);
     println!("Average function times: 
         momentum_time: {:?},
+        limit_and_cool_time: {:?},
         cal_divergence_time: {:?},
         pressure_solve_time: {:?},
         pressure_solve_time per iteration: {:?},
         apply_corrections_time: {:?}
     ", 
     momentum_time / iterations as u32,
+    limit_and_cool_time / iterations as u32,
     cal_divergence_time / iterations as u32, 
     pressure_solve_time / iterations as u32, 
     (pressure_solve_time / pressure_iterations as u32) / iterations as u32,

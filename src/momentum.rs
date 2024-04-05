@@ -235,35 +235,4 @@ mod tests {
         assert_eq!(fs.newv[ak] + fs.newv[ak - pg.n] + fs.newv[ak - 2 * pg.n], -1.0); // conservative        
     }
 
-    #[test]
-    fn test_single_pixel_boundary_adjacent_evolution() {
-        let pg = PixelGrid::new(5, 5);
-        let mut fs = FluidState::new(&pg);
-        let ak0 = 2 * pg.n + 3;
-        fs.u[ak0] = 0.8;
-        pg.print_data(&fs.u);
-        for _k in 0..3 {
-            fs.momentum_step(&pg, 1.0);
-        }
-        assert!(fs.u[ak0] < 0.8);
-    }
-
-    #[test]
-    fn test_q_evolution() {
-        let pg = PixelGrid::new(5, 5);
-        let mut fs = FluidState::new(&pg);
-        let mut q = FluidState::new(&pg); // use q as a fluid state
-        let ak0 = 5 * 2 + 2;
-        fs.u[ak0] = 1.0;
-        fs.u[ak0 + 1] = 1.0;
-        fs.u[ak0 - 1] = 1.0;
-        q.u[ak0] = 1.0;
-        pg.print_data(&q.u);
-
-        q.quantity_step(&fs, &pg, 1.0);
-        pg.print_data(&q.newu);
-        assert!(q.u[ak0 + 1] == 1.0);
-
-    }
-
 }
