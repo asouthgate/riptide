@@ -2,17 +2,17 @@ use crate::pixelgrid::PixelGrid;
 use crate::fluid_state::FluidState;
 
 #[derive(Default)]
-struct Particle {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-    x: f32,
-    y: f32,
-    mass: f32,
-    trail: Vec<(f32, f32)>,
-    t: f32,
-    lifespan: f32
+pub struct Particle {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+    pub x: f32,
+    pub y: f32,
+    pub mass: f32,
+    pub trail: Vec<(f32, f32)>,
+    pub t: f32,
+    pub lifespan: f32
 }
 
 impl Particle {

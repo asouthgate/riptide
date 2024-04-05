@@ -20,7 +20,7 @@ pub fn add_random_wavey_noise(
     for _pt in 0..n_points {
         let rand_i = rng.gen_range(0..pg.m as i32) as usize;
         let rand_j = rng.gen_range(0..pg.n as i32) as usize;
-        let ak = rand_i + pg.m + rand_j;
+        let ak = rand_i * pg.n + rand_j;
         fs.u[ak] += total_velocity_x * 0.5 / n_points as f32;
         fs.v[ak] += total_velocity_y * 0.5 / n_points as f32;
         let du = rng.gen_range(0.0..remaining_u);
