@@ -148,7 +148,6 @@ impl FluidState {
             self.boundary_y[ak + pg.n] = self.boundary[ak + pg.n].min(self.boundary[ak]);
         }
     }
-
 }
 
 #[cfg(test)]
