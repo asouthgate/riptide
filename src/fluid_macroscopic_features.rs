@@ -8,27 +8,23 @@ use rand::prelude::*;
 // apportion uniformly. For the other half,
 // apportion via a random stick-breaking process.
 pub fn add_random_wavey_noise(
-    total_velocity_x: f32,
-    total_velocity_y: f32,
+    lambdax: f32,
+    lambday: f32,
     n_points: usize,
     fs: &mut FluidState,
     pg: &PixelGrid
 ) {
     let mut rng = rand::thread_rng();
-    let mut remaining_u = total_velocity_x / 2.0;
-    let mut remaining_v = total_velocity_y / 2.0;
+    let maxl: i32 = 10;
     for _pt in 0..n_points {
-        let rand_i = rng.gen_range(0..pg.m as i32) as usize;
-        let rand_j = rng.gen_range(0..pg.n as i32) as usize;
-        let ak = rand_i * pg.n + rand_j;
-        fs.u[ak] += total_velocity_x * 0.5 / n_points as f32;
-        fs.v[ak] += total_velocity_y * 0.5 / n_points as f32;
-        let du = rng.gen_range(0.0..remaining_u);
-        let dv = rng.gen_range(0.0..remaining_v);
-        remaining_u -= du;
-        remaining_v -= dv;
-        fs.u[ak] += du;
-        fs.v[ak] += dv;
+
+        let rand_i = rng.gen_range(maxl..(pg.m as i32-maxl) as i32) as usize;
+        let rand_j = rng.gen_range(maxl..(pg.n as i32-maxl) as i32) as usize;
+        let rand_l = rng.gen_range(0..maxl-1) as usize;
+        let rand_u = rng.gen_range(-lambdax..lambdax);
+        let rand_v = rng.gen_range(-lambday..lambday);
+        add_wave(rand_i, rand_j, rand_l, rand_u, rand_v, fs, pg);
+
     }
 }
 
@@ -60,7 +56,6 @@ pub fn add_wave(
         let djf = dj.floor() as i32;
         let i2 = (i as i32 + dif ) as usize;
         let j2 = (j as i32 + djf ) as usize;
-
         let ak = i2 * pg.n + j2;
         fs.u[ak] += u;
         fs.v[ak] += v;
