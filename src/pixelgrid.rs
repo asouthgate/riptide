@@ -25,15 +25,22 @@ impl PixelGrid {
         }
     }
 
-    pub fn new_with_deltas(_m: usize, _n: usize, _dx: f32, _dy: f32) -> Self {
+    pub fn new_with_transform(
+        _m: usize,
+        _n: usize,
+        _dx: f32,
+        _dy: f32,
+        _x: f32,
+        _y: f32
+    ) -> Self {
         PixelGrid {
             m: _m,
             n: _n,
             mn: _m * _n,
             dx: _dx,
             dy: _dy,
-            x: 0.0,
-            y: 0.0,
+            x: _x,
+            y: _y,
             w: _dx * _n as f32,
             h: _dy * _m as f32
         }
@@ -151,7 +158,7 @@ mod tests {
 
    #[test]
     fn test_worldxy2xy_scaling() {
-        let pg = PixelGrid::new_with_deltas(100, 100, 0.5, 0.5);
+        let pg = PixelGrid::new_with_transform(100, 100, 0.5, 0.5, 0.0, 0.0);
         let (mut x, mut y) = pg.worldxy2xy(100.0, 100.0);
         assert_eq!((x, y), (200.0, 200.0));
         (x, y) = pg.worldxy2xy(-100.0, -100.0);
