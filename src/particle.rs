@@ -7,6 +7,7 @@ pub struct Particle {
     pub acceleration: (f32, f32),
     pub f_hydro: (f32, f32),
     pub f_drag: (f32, f32),
+    pub vboost: (f32, f32),
     pub mass: f32,
     pub cdrag: f32,
     pub trail: Vec<(f32, f32)>,
@@ -24,6 +25,7 @@ impl Default for Particle {
             acceleration: (0.0, 0.0),
             f_hydro: (0.0, 0.0),
             f_drag: (0.0, 0.0),
+            vboost: (0.0, 0.0),
             mass: 1.0,
             cdrag: 1.0,
             trail: vec![],
@@ -122,6 +124,9 @@ impl RigidBody {
         self.central_particle.f_drag.1 /= self.virtual_particles.len() as f32;
 
         update_particle_derivatives(&mut self.central_particle, dt);
+        self.central_particle.velocity.0 += self.central_particle.vboost.0;
+        self.central_particle.velocity.1 += self.central_particle.vboost.1;
+        self.central_particle.vboost = (0.0, 0.0);
 
         for p in &mut self.virtual_particles {
             p.acceleration.0 = self.central_particle.acceleration.0;
@@ -177,6 +182,11 @@ impl RigidBody {
 
     pub fn get_v(&mut self) -> &mut f32 {
         &mut self.central_particle.velocity.1
+    }
+
+    pub fn boost(&mut self, bx: f32, by: f32) {
+        self.central_particle.vboost.0 += bx;
+        self.central_particle.vboost.1 += by;
     }
 
 }
@@ -321,13 +331,13 @@ mod tests {
             player_rb.evolve(&fs, &pg, 1.0);
             player_rb.central_particle.print();
         }
-        println!("");
+        assert!(*player_rb.get_y() == 17.0);
         for _it in 0..50 {
             player_rb.evolve(&fs, &pg, 1.0);
-            *player_rb.get_v() -= 2.0;
+            player_rb.boost(0.0, -2.0);
             player_rb.central_particle.print();
         }
-
+        assert!(*player_rb.get_y() == 1.0);
 
     }
 
