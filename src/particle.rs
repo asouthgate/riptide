@@ -1,7 +1,6 @@
 use crate::pixelgrid::PixelGrid;
 use crate::fluid_state::FluidState;
 
-#[derive(Default)]
 pub struct Particle {
     pub position: (f32, f32),
     pub velocity: (f32, f32),
@@ -9,11 +8,31 @@ pub struct Particle {
     pub f_hydro: (f32, f32),
     pub f_drag: (f32, f32),
     pub mass: f32,
+    pub cdrag: f32,
     pub trail: Vec<(f32, f32)>,
     pub trail_length: usize,
     pub t: f32,
     pub lifespan: f32,
     pub rgba: (u8, u8, u8, u8)
+}
+
+impl Default for Particle {
+    fn default() -> Self {
+        Self {
+            position: (0.0, 0.0),
+            velocity: (0.0, 0.0),
+            acceleration: (0.0, 0.0),
+            f_hydro: (0.0, 0.0),
+            f_drag: (0.0, 0.0),
+            mass: 1.0,
+            cdrag: 1.0,
+            trail: vec![],
+            trail_length: 0,
+            t: 0.0,
+            lifespan: 0.0,
+            rgba: (255, 255, 255, 255)
+        }
+    }
 }
 
 impl Particle {
@@ -53,9 +72,11 @@ pub struct RigidBody {
 impl RigidBody {
     pub fn new(x0: f32, y0: f32, mass_density: f32, positions: Vec<(f32, f32)>) -> Self {
         let mut vps = vec![];
+        let n_vps = positions.len();
         for (x, y) in &positions {
             vps.push(Particle {
                 position: (x0 + *x, y0 + *y), mass: mass_density,
+                cdrag: 1.0 / n_vps as f32,
                 ..Default::default()
             });
         }
@@ -187,9 +208,9 @@ fn update_fluid_forces(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f3
     let fu = pg.sample_bilinear_world(&fs.u, p.get_x(), p.get_y());
     let fv = pg.sample_bilinear_world(&fs.v, p.get_x(), p.get_y());
     p.f_hydro = (fu, fv);
-    let cdrag = 0.01;
+    // let cdrag = 1.0;
     // f_drag is 
-    p.f_drag = (-p.get_u() * cdrag, -p.get_v() * cdrag);
+    p.f_drag = (-p.get_u() * p.cdrag, -p.get_v() * p.cdrag);
 }
 
 fn update_particle_derivatives(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f32) {
@@ -201,6 +222,24 @@ fn update_particle_derivatives(fs: &FluidState, pg: &PixelGrid, p: &mut Particle
     p.velocity.1 += p.acceleration.1 * dt;
 }
 
+fn cal_ray(x: f32, y: f32) -> Vec<(f32, f32)> {
+    let sign_x = x.signum();
+    let sign_y = y.signum();
+    let x_abs = x.abs();
+    let y_abs = y.abs();
+    // now build a ray to (prop_dx, prop_dy)
+    let mut ray: Vec<(f32, f32)> = vec![];
+    let maxdrs = x_abs.max(y_abs).trunc() + 1.0;
+    for drs in 0..maxdrs as i32 {
+        ray.push((
+            sign_x * (drs as f32).min(x_abs),
+            sign_y * (drs as f32).min(y_abs)
+        ))
+    }
+    ray.push((x, y));
+    ray
+}
+
 fn cal_proposed_step( 
     fs: &FluidState,
     pg: &PixelGrid,
@@ -210,17 +249,29 @@ fn cal_proposed_step(
     let prop_dx = p.velocity.0 * dt;
     let prop_dy = p.velocity.1 * dt;
     let mut ret = (0.0, 0.0);
-    match pg.sample_world(&(fs.boundary), p.get_x() + prop_dx, p.get_y()) {
-        b if b > 0.0 => {
-            ret.0 = prop_dx;
+
+    let ray = cal_ray(prop_dx, prop_dy);
+
+    let mut collided_x = false;
+    let mut collided_y = false;
+
+    for (pdx, pdy) in ray {
+        if !collided_x {
+            match pg.sample_world(&(fs.boundary), p.get_x() + pdx, p.get_y()) {
+                b if b > 0.0 => {
+                    ret.0 = pdx;
+                }
+                _ => { collided_x = true; }
+            }
         }
-        _ => { }
-    }
-    match pg.sample_world(&(fs.boundary), p.get_x(), p.get_y() + prop_dy) {
-        b if b > 0.0 => {
-            ret.1 = prop_dy;
+        if !collided_y {
+            match pg.sample_world(&(fs.boundary), p.get_x(), p.get_y() + pdy) {
+                b if b > 0.0 => {
+                    ret.1 = pdy;
+                }
+                _ => { collided_y = true; }
+            }
         }
-        _ => { }
     }
     ret
 }
@@ -260,6 +311,36 @@ fn evolve_particle(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f32) {
 mod tests {
     use super::*;
     use rand::prelude::*;
+
+    #[test]
+    fn test_cal_ray() {
+        let mut ray = cal_ray(5.1, 2.3);
+        let raylen = ray.len();
+        assert!(ray[raylen-1].0 == 5.1);
+        assert!(ray[raylen-2].0 == 5.0);
+        assert!(ray[raylen-3].0 == 4.0);
+        assert!(ray[raylen-1].1 == 2.3);
+        assert!(ray[raylen-2].1 == 2.3);
+        assert!(ray[raylen-3].1 == 2.3);
+
+        ray = cal_ray(2.3, -5.1);
+        assert!(ray[raylen-1].0 == 2.3);
+        assert!(ray[raylen-2].0 == 2.3);
+        assert!(ray[raylen-1].1 == -5.1);
+        assert!(ray[raylen-2].1 == -5.0);
+
+        ray = cal_ray(-2.3, -5.1);
+        assert!(ray[raylen-1].0 == -2.3);
+        assert!(ray[raylen-2].0 == -2.3);
+        assert!(ray[raylen-1].1 == -5.1);
+        assert!(ray[raylen-2].1 == -5.0);
+
+        ray = cal_ray(-2.3, 5.1);
+        assert!(ray[raylen-1].0 == -2.3);
+        assert!(ray[raylen-2].0 == -2.3);
+        assert!(ray[raylen-1].1 == 5.1);
+        assert!(ray[raylen-2].1 == 5.0);
+    }
 
     #[test]
     fn test_evolve_rigidbody() {
@@ -316,7 +397,9 @@ mod tests {
     }
 
     #[test]
-    fn test_evolve_particle() {
+    fn test_evolve_particle_mass_one() {
+        // for a particle of unit mass, it should flow the same as the fluid
+        // since the fluid is unit density
         let pg = PixelGrid::new(10, 10);  
         let mut fs = FluidState::new(&pg);
         for _ak in 0..pg.mn {
@@ -340,14 +423,14 @@ mod tests {
         pg.print_data(&fs.u);
         pg.print_data(&fs.v);
         pg.print_data(&fs.boundary);
-        println!("{} {}", p.position.0, p.position.1);
 
+        println!("init: {} {} <- {} {} <- {} {}", p.position.0, p.position.1, p.get_u(), p.get_v(), p.acceleration.0, p.acceleration.1);
         evolve_particle(&fs, &pg, &mut p, 1.0);
-        println!("{} {}", p.position.0, p.position.1);
+        println!("{} {} <- {} {} <- {} {}", p.position.0, p.position.1, p.get_u(), p.get_v(), p.acceleration.0, p.acceleration.1);
         assert!(! p.is_dead());
         for _it in 0..5 {
             evolve_particle(&fs, &pg, &mut p, 1.0);
-            println!("{} {}", p.position.0, p.position.1);
+            println!("{} {} <- {} {} <- {} {}", p.position.0, p.position.1, p.get_u(), p.get_v(), p.acceleration.0, p.acceleration.1);
         }
         assert!(p.is_dead());
         assert!(p.position.0 == 7.0); // started at 1, 1, did 6 steps
