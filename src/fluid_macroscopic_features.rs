@@ -64,8 +64,8 @@ pub fn add_wave(
 
 pub fn add_line(i0: usize, j0: usize, ie: usize, je: usize, u: f32, v: f32, fs: &mut FluidState, pg: &PixelGrid) {
     let sqrt2 = (2.0 as f32).powf(0.5);
-    let xdiff = (je-j0) as f32;
-    let ydiff = (ie-i0) as f32;
+    let xdiff = (je as i32 - j0 as i32) as f32;
+    let ydiff = (ie as i32 - i0 as i32 ) as f32;
     let length = (xdiff.powf(2.0) + ydiff.powf(2.0)).powf(0.5);
     let xdir = xdiff / length;
     let ydir = ydiff / length;
@@ -78,7 +78,9 @@ pub fn add_line(i0: usize, j0: usize, ie: usize, je: usize, u: f32, v: f32, fs: 
         let i2 = (i0 as i32 + dif ) as usize;
         let j2 = (j0 as i32 + djf ) as usize;
 
+
         let ak = i2 * pg.n + j2;
+
         fs.u[ak] += u;
         fs.v[ak] += v;
     }
