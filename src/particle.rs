@@ -311,6 +311,44 @@ mod tests {
     use rand::prelude::*;
 
     #[test]
+    fn test_cal_proposed_step() {
+        let pg = PixelGrid::new(10, 10);  
+        let mut fs = FluidState::new(&pg);
+        // for _ak in 0..pg.mn {
+        //     fs.u[_ak] = 10.0;
+        //     fs.v[_ak] = 0.0;
+        // }
+        for j in 0..pg.n {
+            let ak = 6 * pg.n + j;
+            fs.boundary[ak] = 0.0;
+        }
+        for i in 0..pg.m {
+            let ak = i * pg.n + 8;
+            fs.boundary[ak] = 0.0;
+        }
+        let mut p = Particle {
+            position: (1.0, 1.0),
+            velocity: (0.81, 0.52),
+            mass: 1.0,
+            lifespan: 4.0,
+            ..Default::default()
+        };
+        pg.print_data(&fs.u);
+        pg.print_data(&fs.v);
+        pg.print_data(&fs.boundary);
+        let (mut px, mut py) = (0.0, 0.0);
+        for _it in 0..100 {
+            (px, py) = cal_proposed_step(&fs, &pg, &mut p, 1.0);
+            p.position.0 += px;
+            p.position.1 += py;
+        }
+        assert!(p.get_x() <= 8.0);
+        assert!(p.get_y() <= 6.0);
+        assert!(p.get_x() >= 6.0);
+        assert!(p.get_y() >= 4.0);
+    }
+
+    #[test]
     fn test_cal_ray() {
         let mut ray = cal_ray(5.1, 2.3);
         let raylen = ray.len();
