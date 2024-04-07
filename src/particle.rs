@@ -59,6 +59,16 @@ impl Particle {
     pub fn get_v(&self) -> f32 {
         self.velocity.1
     }
+    pub fn print(&self) {
+        println!(
+            "({:.5} {:.5}) | ph ({:.5} {:.5}) pd ({:.5} {:.5}) a ({:.5} {:.5}) v ({:.5} {:.5})",
+            self.position.0, self.position.1,
+            self.f_hydro.0, self.f_hydro.1,
+            self.f_drag.0, self.f_drag.1,
+            self.acceleration.0, self.acceleration.1,
+            self.velocity.0, self.velocity.1,
+        );
+    }
 }
 
 pub fn length(u: f32, v: f32) -> f32 {
@@ -73,19 +83,25 @@ pub struct RigidBody {
 }
 
 impl RigidBody {
-    pub fn new(x0: f32, y0: f32, mass_density: f32, positions: Vec<(f32, f32)>) -> Self {
+    pub fn new(x0: f32, y0: f32, mass_per_pixel: f32, drag_per_pixel: f32, positions: Vec<(f32, f32)>) -> Self {
         let mut vps = vec![];
-        let n_vps = positions.len();
+        // let n_vps = positions.len() as f32;
         for (x, y) in &positions {
             vps.push(Particle {
-                position: (x0 + *x, y0 + *y), mass: mass_density,
-                cdrag: 1.0 / n_vps as f32,
+                position: (x0 + *x, y0 + *y), 
+                mass: mass_per_pixel,
+                cdrag: drag_per_pixel,
                 ..Default::default()
             });
         }
         RigidBody {
             virtual_particles: vps,
-            central_particle: Particle { position: (x0, y0), mass: mass_density, ..Default::default() },
+            central_particle: Particle { 
+                position: (x0, y0), 
+                mass: mass_per_pixel, 
+                cdrag: drag_per_pixel,
+                ..Default::default() 
+            },
             relative_positions: positions,
         }
     }
@@ -94,23 +110,11 @@ impl RigidBody {
         self.central_particle.f_hydro = (0.0, 0.0);
         self.central_particle.f_drag = (0.0, 0.0);
         for p in &mut self.virtual_particles {
-            // println!(
-            //     "\t??? {} {} -> {} {}", p.velocity.0, p.velocity.1, p.f_drag.0, p.f_drag.1
-            // );
             update_fluid_forces(fs, pg, p, dt);
             self.central_particle.f_hydro.0 += p.f_hydro.0;
             self.central_particle.f_hydro.1 += p.f_hydro.1;
             self.central_particle.f_drag.0 += p.f_drag.0;
             self.central_particle.f_drag.1 += p.f_drag.1;
-            // println!(
-            //     "\t({:.5} {:.5}) | ph ({:.5} {:.5}) pd ({:.5} {:.5}) a ({:.5} {:.5}) v ({:.5} {:.5}) |v| {:.5}",
-            //     p.position.0, p.position.1,
-            //     p.f_hydro.0, p.f_hydro.1,
-            //     p.f_drag.0, p.f_drag.1,
-            //     p.acceleration.0, p.acceleration.1,
-            //     p.velocity.0, p.velocity.1,
-            //     length(p.velocity.0, p.velocity.1)
-            // );
         }
         self.central_particle.f_hydro.0 /= self.virtual_particles.len() as f32;
         self.central_particle.f_hydro.1 /= self.virtual_particles.len() as f32;
@@ -119,27 +123,11 @@ impl RigidBody {
 
         update_particle_derivatives(&mut self.central_particle, dt);
 
-        // println!(
-        //     "({:.5} {:.5}) | ph ({:.5} {:.5}) pd ({:.5} {:.5}) a ({:.5} {:.5}) v ({:.5} {:.5})",
-        //     self.central_particle.position.0, self.central_particle.position.1,
-        //     self.central_particle.f_hydro.0, self.central_particle.f_hydro.1,
-        //     self.central_particle.f_drag.0, self.central_particle.f_drag.1,
-        //     self.central_particle.acceleration.0, self.central_particle.acceleration.1,
-        //     self.central_particle.velocity.0, self.central_particle.velocity.1,
-        // );
-
         for p in &mut self.virtual_particles {
             p.acceleration.0 = self.central_particle.acceleration.0;
             p.acceleration.1 = self.central_particle.acceleration.1;
             p.velocity.0 = self.central_particle.velocity.0;
             p.velocity.1 = self.central_particle.velocity.1;
-            // println!(
-            //     "\t({:.5} {:.5}) | ({:.5} {:.5}) ({:.5} {:.5}) ({:.5} {:.5})",
-            //     p.position.0, p.position.1,
-            //     p.f_hydro.0, p.f_hydro.1,
-            //     p.acceleration.0, p.acceleration.1,
-            //     p.velocity.0, p.velocity.1,
-            // );
         }
     }
 
@@ -306,6 +294,44 @@ mod tests {
     use rand::{SeedableRng, rngs::StdRng};
 
     #[test]
+    fn test_rigidbody_doesnt_get_stuck() {
+        let pg = PixelGrid::new(20, 4);  
+        let mut fs = FluidState::new(&pg);
+        let seed_value = 42;
+        let mut rng = StdRng::seed_from_u64(seed_value);
+        for j in 0..pg.n {
+            for i in 0..pg.m {
+                let ak = i * pg.n + j;
+                fs.u[ak] = 0.0;
+                fs.v[ak] = 1.0;
+            }
+        }
+        pg.print_data(&fs.u);
+        pg.print_data(&fs.v);
+        pg.print_data(&fs.boundary);
+        let player_rb_positions: Vec<(f32, f32)> = vec![
+            (0.0, 0.0),
+            (0.0, 1.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+        ];
+        let mut player_rb = RigidBody::new(1.0, 1.0, 1.0, 1.0, player_rb_positions);
+
+        for _it in 0..50 {
+            player_rb.evolve(&fs, &pg, 1.0);
+            player_rb.central_particle.print();
+        }
+        println!("");
+        for _it in 0..50 {
+            player_rb.evolve(&fs, &pg, 1.0);
+            *player_rb.get_v() -= 2.0;
+            player_rb.central_particle.print();
+        }
+
+
+    }
+
+    #[test]
     fn test_particles_never_cross_boundary() {
         let pg = PixelGrid::new(20, 40);  
         let mut fs = FluidState::new(&pg);
@@ -433,7 +459,7 @@ mod tests {
         // first test a single particle, it should be the same as Particle
         let mut pos1 = vec![];
         pos1.push((0.0, 0.0));
-        let mut rb1 = RigidBody::new(1.0, 1.0, 1.0, pos1);
+        let mut rb1 = RigidBody::new(1.0, 1.0, 1.0, 1.0, pos1);
         let mut p = Particle {
             position: (1.0, 1.0),
             mass: 1.0,
@@ -452,7 +478,7 @@ mod tests {
         let mut pos2 = vec![];
         pos2.push((0.0, 0.0));
         pos2.push((0.0, 1.0));
-        let mut rb2 = RigidBody::new(1.0, 1.0, 1.0, pos2);
+        let mut rb2 = RigidBody::new(1.0, 1.0, 1.0, 1.0, pos2);
         pg.print_data(&fs.boundary);
         for _it in 0..10 {
             rb2.evolve(&fs, &pg, 1.0);
