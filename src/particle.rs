@@ -250,27 +250,21 @@ fn cal_proposed_step(
 
     let ray = cal_ray(prop_dx, prop_dy);
 
-    let mut collided_x = false;
-    let mut collided_y = false;
-
+    let mut not_collided_x = true;
+    let mut not_collided_y = true;
+    
     for (pdx, pdy) in ray {
-        if !collided_x {
-            match pg.sample_world(&(fs.boundary), p.get_x() + pdx, p.get_y()) {
-                b if b > 0.0 => {
-                    ret.0 = pdx;
-                }
-                _ => { collided_x = true; }
-            }
+        // assert!(pg.sample_world(&(fs.boundary), p.get_x() + ret.0, p.get_y() + ret.1) > 0.0);
+        not_collided_x = not_collided_x && (pg.sample_world(&(fs.boundary), p.get_x() + pdx, p.get_y() + ret.1) > 0.0);
+        if not_collided_x {
+            ret.0 = pdx;
         }
-        if !collided_y {
-            match pg.sample_world(&(fs.boundary), p.get_x(), p.get_y() + pdy) {
-                b if b > 0.0 => {
-                    ret.1 = pdy;
-                }
-                _ => { collided_y = true; }
-            }
+        not_collided_y = not_collided_y && (pg.sample_world(&(fs.boundary), p.get_x() + ret.0, p.get_y() + pdy) > 0.0);
+        if not_collided_y {
+            ret.1 = pdy;
         }
     }
+    // assert!(pg.sample_world(&(fs.boundary), p.get_x() + ret.0, p.get_y() + ret.1) > 0.0);
     ret
 }
 
@@ -309,6 +303,48 @@ fn evolve_particle(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f32) {
 mod tests {
     use super::*;
     use rand::prelude::*;
+    use rand::{SeedableRng, rngs::StdRng};
+
+    #[test]
+    fn test_particles_never_cross_boundary() {
+        let pg = PixelGrid::new(20, 40);  
+        let mut fs = FluidState::new(&pg);
+        let seed_value = 42;
+        let mut rng = StdRng::seed_from_u64(seed_value);
+        for j in 0..pg.n {
+            for i in 0..pg.m {
+                let ak = i * pg.n + j;
+                fs.u[ak] = rng.gen_range(0.0..5.0);
+                fs.v[ak] = rng.gen_range(0.0..5.0);
+            }
+        }
+        for _bi in 0..200 {
+            let ak = rng.gen_range(0..pg.mn);
+            fs.boundary[ak] = 0.0;
+        }
+        pg.print_data(&fs.u);
+        pg.print_data(&fs.v);
+        pg.print_data(&fs.boundary);
+        let mut particles: Vec<Particle> = vec![];
+        for j in 1..pg.n-1 {
+            for i in 1..pg.m-1 {
+                let ak = i * pg.n + j;
+                if fs.boundary[ak] > 0.0 {
+                    particles.push(Particle {
+                        position: (j as f32, i as f32),
+                        .. Default::default()
+                    })
+                }
+            }
+        }
+        for _it in 0..100 {
+            for p in &mut particles {
+                let ak = pg.xy2ak(p.get_x(), p.get_y());
+                p.evolve(&fs, &pg, 1.0);
+                assert!(pg.sample(&fs.boundary, p.get_x(), p.get_y()) > 0.0);
+            }
+        }   
+    }
 
     #[test]
     fn test_cal_proposed_step() {
