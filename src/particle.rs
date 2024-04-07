@@ -80,7 +80,6 @@ impl RigidBody {
                 ..Default::default()
             });
         }
-        let n_particles = positions.len();
         RigidBody {
             virtual_particles: vps,
             central_particle: Particle { position: (x0, y0), mass: mass_density, ..Default::default() },
@@ -89,7 +88,6 @@ impl RigidBody {
     }
 
     pub fn update_derivatives(&mut self, fs: &FluidState, pg: &PixelGrid, dt: f32) {
-        let mut c = 0;
         self.central_particle.f_hydro = (0.0, 0.0);
         self.central_particle.f_drag = (0.0, 0.0);
         for p in &mut self.virtual_particles {
@@ -110,14 +108,13 @@ impl RigidBody {
             //     p.velocity.0, p.velocity.1,
             //     length(p.velocity.0, p.velocity.1)
             // );
-            c += 1;
         }
         self.central_particle.f_hydro.0 /= self.virtual_particles.len() as f32;
         self.central_particle.f_hydro.1 /= self.virtual_particles.len() as f32;
         self.central_particle.f_drag.0 /= self.virtual_particles.len() as f32;
         self.central_particle.f_drag.1 /= self.virtual_particles.len() as f32;
 
-        update_particle_derivatives(fs, pg, &mut self.central_particle, dt);
+        update_particle_derivatives(&mut self.central_particle, dt);
 
         // println!(
         //     "({:.5} {:.5}) | ph ({:.5} {:.5}) pd ({:.5} {:.5}) a ({:.5} {:.5}) v ({:.5} {:.5})",
@@ -156,7 +153,6 @@ impl RigidBody {
         // now, we need to update all positions (all in the same direction)
         // if any one fails, they all fail to move
         let (mut dx, mut dy) = (1.0, 1.0); // start off as some non-zero value
-        let mut c = 0;
         for particle in &mut self.virtual_particles {
             let (pdx, pdy) = cal_proposed_step(fs, pg, particle, dt);
             if dx != 0.0 {
@@ -165,7 +161,6 @@ impl RigidBody {
             if dy != 0.0 {
                 dy = pdy;
             }
-            c += 1;
         }
         self.central_particle.position.0 += dx;
         self.central_particle.position.1 += dy;
@@ -195,7 +190,7 @@ impl RigidBody {
 
 }
 
-fn update_fluid_forces(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f32) {
+fn update_fluid_forces(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, _dt: f32) { // dt could be used
     // fluid forces, for unit density and unit area, is just velocity
     // this can be calculated from the momentum flux
     // or, imagine water is little balls
@@ -213,7 +208,7 @@ fn update_fluid_forces(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f3
     p.f_drag = (-p.get_u() * p.cdrag, -p.get_v() * p.cdrag);
 }
 
-fn update_particle_derivatives(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f32) {
+fn update_particle_derivatives(p: &mut Particle, dt: f32) {
     p.acceleration.0 = p.f_hydro.0 / p.mass; // makes sense, the higher the mass the lower the acceleration
     p.acceleration.1 = p.f_hydro.1 / p.mass;
     p.acceleration.0 += p.f_drag.0 / p.mass;
@@ -295,7 +290,7 @@ fn update_particle_position(
 
 fn evolve_particle(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, dt: f32) {
     update_fluid_forces(fs, pg, p, dt);
-    update_particle_derivatives(fs, pg, p, dt);
+    update_particle_derivatives(p, dt);
     update_particle_position(fs, pg, p, dt);
     if p.trail.len() > p.trail_length {
         let (lastx, lasty) = p.trail[p.trail.len()-1];
