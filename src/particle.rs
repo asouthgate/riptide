@@ -41,6 +41,9 @@ impl Particle {
             position: (x, y), mass: 1.0, ..Default::default()
         }
     }
+    pub fn evolve(&mut self, fs: &FluidState, pg: &PixelGrid, dt: f32) {
+        evolve_particle(fs, pg, self, dt)
+    }
     pub fn is_dead(&self) -> bool{
         self.t > self.lifespan
     }
