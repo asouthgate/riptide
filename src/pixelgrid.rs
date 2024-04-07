@@ -105,7 +105,7 @@ impl PixelGrid {
             (x, _) if (x > self.n as f32 || x < 0.0) => None,
             (_, y) if (y > self.m as f32 || y < 0.0) => None,
             _ => {
-                Some((y as usize, x as usize))
+                Some((y.trunc() as usize, x.trunc() as usize))
             }
         }
     }
