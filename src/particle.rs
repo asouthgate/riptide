@@ -215,7 +215,26 @@ fn update_fluid_forces(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, _dt: f
 
 pub fn update_particle_velocity(p: &mut Particle, dt: f32) {
     p.velocity.0 += p.acceleration.0 * dt;
-    p.velocity.1 += p.acceleration.1 * dt;
+    p.velocity.1 += p.acceleration.1 * dt;    
+}
+
+pub fn attenuate_particle_velocity_at_boundary(pg: &PixelGrid, fs: &FluidState, p: &mut Particle) {
+    let bleft = pg.sample_world(&fs.boundary, p.get_x() - 1.0, p.get_y());
+    let bright = pg.sample_world(&fs.boundary, p.get_x() + 1.0, p.get_y());
+    let bup = pg.sample_world(&fs.boundary, p.get_x(), p.get_y() + 1.0);
+    let bdown = pg.sample_world(&fs.boundary, p.get_x(), p.get_y() - 1.0);
+    if bleft == 0.0 {
+        p.velocity.0 = -p.velocity.0;
+    }
+    if bright == 0.0 {
+        p.velocity.0 = -p.velocity.0;
+    }
+    if bdown == 0.0 {
+        p.velocity.1 = -p.velocity.1;
+    }
+    if bup == 0.0 {
+        p.velocity.1 = -p.velocity.1;
+    }
 }
 
 pub fn update_particle_derivatives(p: &mut Particle, dt: f32) {
