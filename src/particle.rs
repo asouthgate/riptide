@@ -213,13 +213,17 @@ fn update_fluid_forces(fs: &FluidState, pg: &PixelGrid, p: &mut Particle, _dt: f
     p.f_drag = (-p.get_u() * p.cdrag, -p.get_v() * p.cdrag);
 }
 
-fn update_particle_derivatives(p: &mut Particle, dt: f32) {
+pub fn update_particle_velocity(p: &mut Particle, dt: f32) {
+    p.velocity.0 += p.acceleration.0 * dt;
+    p.velocity.1 += p.acceleration.1 * dt;
+}
+
+pub fn update_particle_derivatives(p: &mut Particle, dt: f32) {
     p.acceleration.0 = p.f_hydro.0 / p.mass; // makes sense, the higher the mass the lower the acceleration
     p.acceleration.1 = p.f_hydro.1 / p.mass;
     p.acceleration.0 += p.f_drag.0 / p.mass;
     p.acceleration.1 += p.f_drag.1 / p.mass;
-    p.velocity.0 += p.acceleration.0 * dt;
-    p.velocity.1 += p.acceleration.1 * dt;
+    update_particle_velocity(p, dt);
 }
 
 fn cal_ray(x: f32, y: f32) -> Vec<(f32, f32)> {
@@ -275,7 +279,7 @@ fn cal_proposed_step(
 /// # Returns
 /// 
 /// tuple of bools indicating whether move failed in x or y directions.
-fn update_particle_position(
+pub fn update_particle_position(
     fs: &FluidState,
     pg: &PixelGrid,
     p: &mut Particle,
