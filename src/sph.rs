@@ -281,19 +281,19 @@ impl ParticleIndex {
         let mut result = vec![];
         let (x, y) = pg.worldxy2xy(wx, wy);
         let i0 = (y - dist).max(0.0) as usize;
-        let ie = (y + dist + 1.0).min(pg.m as f32 + 1.0) as usize;
+        let ie = (y + dist + 1.0).min(pg.m as f32) as usize;
         let j0 = (x - dist).max(0.0) as usize;
-        let je = (x + dist + 1.0).min(pg.n as f32 + 1.0) as usize;
+        let je = (x + dist + 1.0).min(pg.n as f32) as usize;
         for y2 in i0..ie {
             for x2 in j0..je {
                 let ak = pg.xy2ak(x2 as f32, y2 as f32);
                 for ind in &self.slots[ak] {
                     result.push(*ind);
                 }
-                if result.len() as f32 > dist.powi(2) {
-                    // println!("ALERT: better way to do this, step over area once first, like bottom of pyramid");
-                    return result;
-                }
+                // if result.len() as f32 > dist.powi(2) {
+                //     // println!("ALERT: better way to do this, step over area once first, like bottom of pyramid");
+                //     return result;
+                // }
             }
         }
         return result;
@@ -504,15 +504,16 @@ mod tests {
             mass: 1.0, density: 1.0, pressure: 1.0,
             .. Default::default()
         };
-        let mut nbrs: Vec<Particle> = vec![p2];
+        let mut nbrs: Vec<Particle> = vec![p1, p2];
         cal_acceleration_i(0, &mut nbrs, 0.0, 0.0, 1.0);
-        assert!(p1.acceleration.0 < 0.0);
-        assert!(p1.acceleration.1 == 0.0);
+        println!("{} {}", nbrs[0].acceleration.0, nbrs[0].acceleration.1);
+        assert!(nbrs[0].acceleration.0 < 0.0);
+        assert!(nbrs[0].acceleration.1 == 0.0);
 
         nbrs.push(p3);
         cal_acceleration_i(0, &mut nbrs, 0.0, 0.0, 1.0);
-        assert!(p1.acceleration.0 == 0.0);
-        assert!(p1.acceleration.1 == 0.0);
+        assert!(nbrs[0].acceleration.0 == 0.0);
+        assert!(nbrs[0].acceleration.1 == 0.0);
 
         let mut p4 = Particle{
             position: (-1.0, -1.0), velocity: (0.0, 0.0),
@@ -521,8 +522,8 @@ mod tests {
         };
         nbrs.push(p4);
         cal_acceleration_i(0, &mut nbrs, 0.0, 0.0, 1.0);
-        assert!(p1.acceleration.0 >= 0.0);
-        assert!(p1.acceleration.1 >= 0.0);
+        assert!(nbrs[0].acceleration.0 >= 0.0);
+        assert!(nbrs[0].acceleration.1 >= 0.0);
 
         let mut p5 = Particle{
             position: (-1.0, 1.0), velocity: (0.0, 0.0),
@@ -531,8 +532,8 @@ mod tests {
         };
         nbrs.push(p5);
         cal_acceleration_i(0, &mut nbrs, 0.0, 0.0, 1.0);
-        assert!(p1.acceleration.0 >= 0.0);
-        assert!(p1.acceleration.1 == 0.0);
+        assert!(nbrs[0].acceleration.0 >= 0.0);
+        assert!(nbrs[0].acceleration.1 == 0.0);
 
         let mut p6 = Particle{
             position: (1.0, -1.0), velocity: (0.0, 0.0),
@@ -541,8 +542,8 @@ mod tests {
         };
         nbrs.push(p6);
         cal_acceleration_i(0, &mut nbrs, 0.0, 0.0, 1.0);
-        assert!(p1.acceleration.0 >= 0.0);
-        assert!(p1.acceleration.1 >= 0.0);
+        assert!(nbrs[0].acceleration.0 >= 0.0);
+        assert!(nbrs[0].acceleration.1 >= 0.0);
 
         let mut p7 = Particle{
             position: (1.0, 1.0), velocity: (0.0, 0.0),
@@ -551,8 +552,8 @@ mod tests {
         };
         nbrs.push(p7);
         cal_acceleration_i(0, &mut nbrs, 0.0, 0.0, 1.0);
-        assert!(p1.acceleration.0 == 0.0);
-        assert!(p1.acceleration.1 == 0.0);
+        assert!(nbrs[0].acceleration.0 == 0.0);
+        assert!(nbrs[0].acceleration.1 == 0.0);
     }
 
     #[test]
