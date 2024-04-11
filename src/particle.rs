@@ -1,6 +1,7 @@
 use crate::pixelgrid::PixelGrid;
 use crate::fluid_state::FluidState;
 
+
 pub struct Particle {
     pub position: (f32, f32),
     pub velocity: (f32, f32),
