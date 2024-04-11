@@ -40,15 +40,34 @@ pub fn cubic_spline_grad(dx: f32, dy: f32, r: f32, h: f32) -> (f32, f32) {
     }
 }
 
-fn gaussian_power_kernel_dwdr(r: f32, h: f32) -> f32 {
-    0.0
+fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
+    match r {
+        _r if r < 0.0 => {
+            0.0
+        },
+        _r if r > h => {
+            0.0
+        }
+        _ => {
+            let coeff = 15.0 / (PI * h.powi(6));
+            coeff * (h - r).powi(3)
+        }
+    }
 }
 
-pub fn gaussian_power_kernel_grad(dx: f32, dy: f32, h: f32) -> (f32, f32) {
-    // dwdx = dwdr * drdx, r = sqrt(x^2 + y^2) -> drdx = x/r
-    let r = (dx.powi(2) + dy.powi(2)).powf(0.5);
-    let l = gaussian_power_kernel_dwdr(r, h) / r;
-    (dx * l, dy * l)
+fn debrun_spiky_kernel_dwdr(r: f32, h: f32) -> f32 {
+    match r {
+        _r if r < 0.0 => {
+            0.0
+        },
+        _r if r > h => {
+            0.0
+        }
+        _ => {
+            let coeff = 15.0 / (PI * h.powi(6));
+            - 3.0 * coeff * (h - r).powi(2)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -80,28 +99,21 @@ mod tests {
         assert!(cubic_spline_kernel_dwdq(10.0, 1.0) == 0.0);
     }
 
-    // #[test]
-    // fn test_cubic_spline_kernel_dwdq_bigh() {
-    //     let h = 1.0;
-    //     assert!(cubic_spline_kernel_dwdq(0.00, h) == 0.0);
-    //     let mut xs = vec![];
-    //     let maxk = 100;
-    //     for k in 0..maxk {
-    //         xs.push(h * 2.0 * ( k as f32 / maxk as f32));
-    //     }
-    //     let mut ys = vec![];
-    //     for x in xs {
-    //         let y = cubic_spline_kernel_dwdq(x, h);
-    //         println!("? {:.5} {:.5} ", x, y);
-    //         ys.push(y);
-    //     }
-    //     println!("")
-    //     // println!("{} {} {} {} {}", v0, v05, v1, v, v4, v5);
-    // }
+    #[test]
+    fn test_spiky_kernel() {
+        let h: f32 = 1.329;
+        let r: f32 = 0.39881;
+        assert!((debrun_spiky_kernel(r, h) - 0.6974394347109141).abs() < 0.0000001);
+        assert!(debrun_spiky_kernel(-0.000001, h) == 0.0);
+        assert!(debrun_spiky_kernel(1.33, h) == 0.0);
+    }
 
     #[test]
-    fn test_kernel_lap() {
-
+    fn test_kernel_dwdr() {
+        let h: f32 = 1.329;
+        let r: f32 = 0.39881;
+        println!("{}", debrun_spiky_kernel_dwdr(0.00000000001, h));
+        assert!(debrun_spiky_kernel_dwdr(0.0, h) < -4.5); // doesn't disappear at origin
     }
 
 }
