@@ -1,7 +1,9 @@
 use riptide::pixelgrid::PixelGrid;
 use riptide::fluid_state::FluidState;
 use riptide::particle::*;
+use riptide::particle_index::*;
 use riptide::sph::*;
+use riptide::boundary::*;
 use riptide::pressure::{JacobiPressureSolver, PressureSolver};
 use std::time::{Duration, Instant};
 
@@ -26,7 +28,7 @@ fn main() {
         }
     }
     let n_real_particles = particles.len();
-    println!("{}", n_real_particles);
+    let mut particle_index = ParticleIndex::new(&pg);
     particles.extend(get_ghost_particles_naive(&fs, &pg));
 
 
@@ -63,11 +65,11 @@ fn main() {
         let t5 = Instant::now();
         apply_corrections_time += t5 - t4;
 
-        update_all_particles(
-            &pg, &fs, 
-            &mut particles, n_real_particles,
-            rho0, c0, h, dt, (0.0, 0.0), 0.0, 0.0
-        );
+        // update_all_particles(
+        //     &pg, &fs, &mut particle_index,
+        //     &mut particles, n_real_particles,
+        //     rho0, c0, h, dt, (0.0, 0.0), 0.0
+        // );
         let t6 = Instant::now();
         
     }

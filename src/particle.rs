@@ -8,8 +8,9 @@ pub struct Particle {
     pub acceleration: (f32, f32),
     pub pressure: f32,
     pub density: f32,
-    pub f_hydro: (f32, f32),
-    pub f_drag: (f32, f32),
+    pub h: f32, // characteristic length
+    pub f_hydro: (f32, f32), // hydrostatic pressure force
+    pub f_drag: (f32, f32), // viscous drag force
     pub vboost: (f32, f32),
     pub mass: f32,
     pub cdrag: f32,
@@ -33,6 +34,7 @@ impl Default for Particle {
             vboost: (0.0, 0.0),
             mass: 1.0,
             cdrag: 1.0,
+            h: 1.0,
             trail: vec![],
             trail_length: 0,
             t: 0.0,

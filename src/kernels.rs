@@ -55,7 +55,7 @@ fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
     }
 }
 
-fn debrun_spiky_kernel_dwdr(r: f32, h: f32) -> f32 {
+pub fn debrun_spiky_kernel_dwdr(r: f32, h: f32) -> f32 {
     match r {
         _r if r < 0.0 => {
             0.0
@@ -68,6 +68,16 @@ fn debrun_spiky_kernel_dwdr(r: f32, h: f32) -> f32 {
             - 3.0 * coeff * (h - r).powi(2)
         }
     }
+}
+
+pub fn cal_r(dx: f32, dy: f32) -> f32 {
+    (dx.powi(2) + dy.powi(2)).powf(0.5)
+}
+
+pub fn debrun_spiky_kernel_grad(dx: f32, dy: f32, h: f32) -> (f32, f32) {
+    let r = cal_r(dx, dy);
+    let dwdror = debrun_spiky_kernel_dwdr(r, h) / r;
+    (dx * dwdror, dy * dwdror)
 }
 
 #[cfg(test)]
@@ -112,8 +122,21 @@ mod tests {
     fn test_kernel_dwdr() {
         let h: f32 = 1.329;
         let r: f32 = 0.39881;
-        println!("{}", debrun_spiky_kernel_dwdr(0.00000000001, h));
         assert!(debrun_spiky_kernel_dwdr(0.0, h) < -4.5); // doesn't disappear at origin
+    }
+
+    #[test]
+    fn test_kernel_grad() {
+        let h: f32 = 1.329;
+        let dx: f32 = 0.1361;
+        let dy: f32 = 0.9981;
+        let r: f32 = cal_r(dx, dy);
+        let h = 1.8;
+        let grad = debrun_spiky_kernel_grad(dx, dy, h);
+        assert!((grad.0 - dx * debrun_spiky_kernel_dwdr(r, h) / r).abs() < 0.000001);
+        assert!((grad.1 - dy * debrun_spiky_kernel_dwdr(r, h) / r).abs() < 0.000001);
+        assert!(grad.0 < 0.0); // we expect the gradient to be pointing downwards
+        assert!(grad.1 < 0.0);
     }
 
 }
