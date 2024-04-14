@@ -40,7 +40,7 @@ pub fn cubic_spline_grad(dx: f32, dy: f32, r: f32, h: f32) -> (f32, f32) {
     }
 }
 
-fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
+pub fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
     match r {
         _r if r < 0.0 => {
             0.0
@@ -49,7 +49,7 @@ fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
             0.0
         }
         _ => {
-            let coeff = 15.0 / (PI * h.powi(6));
+            let coeff = 10.0 / (PI * h.powi(5)); // TWO DIMENSIONAL CASE
             coeff * (h - r).powi(3)
         }
     }
@@ -64,7 +64,7 @@ pub fn debrun_spiky_kernel_dwdr(r: f32, h: f32) -> f32 {
             0.0
         }
         _ => {
-            let coeff = 15.0 / (PI * h.powi(6));
+            let coeff = 10.0 / (PI * h.powi(6));
             - 3.0 * coeff * (h - r).powi(2)
         }
     }
