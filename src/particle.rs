@@ -11,6 +11,7 @@ pub struct Particle {
     pub h: f32, // characteristic length
     pub f_hydro: (f32, f32), // hydrostatic pressure force
     pub f_drag: (f32, f32), // viscous drag force
+    pub f_body: (f32, f32),
     pub vboost: (f32, f32),
     pub mass: f32,
     pub cdrag: f32,
@@ -29,6 +30,7 @@ impl Default for Particle {
             acceleration: (0.0, 0.0),
             f_hydro: (0.0, 0.0),
             f_drag: (0.0, 0.0),
+            f_body: (0.0, 0.0),
             pressure: 0.0,
             density: 1.0,
             vboost: (0.0, 0.0),
@@ -221,22 +223,22 @@ pub fn update_particle_velocity(p: &mut Particle, dt: f32) {
     p.velocity.1 += p.acceleration.1 * dt;    
 }
 
-pub fn attenuate_particle_velocity_at_boundary(pg: &PixelGrid, fs: &FluidState, p: &mut Particle) {
+pub fn attenuate_particle_velocity_at_boundary(pg: &PixelGrid, fs: &FluidState, p: &mut Particle, factor: f32) {
     let bleft = pg.sample_world(&fs.boundary, p.get_x() - 1.0, p.get_y());
     let bright = pg.sample_world(&fs.boundary, p.get_x() + 1.0, p.get_y());
     let bup = pg.sample_world(&fs.boundary, p.get_x(), p.get_y() + 1.0);
     let bdown = pg.sample_world(&fs.boundary, p.get_x(), p.get_y() - 1.0);
-    if bleft == 0.0 {
-        p.velocity.0 = -p.velocity.0;
+    if bleft == 0.0 && p.velocity.0 < 0.0 {
+        p.velocity.0 = -p.velocity.0 * factor;
     }
-    if bright == 0.0 {
-        p.velocity.0 = -p.velocity.0;
+    if bright == 0.0 && p.velocity.0 > 0.0 {
+        p.velocity.0 = -p.velocity.0 * factor;
     }
-    if bdown == 0.0 {
-        p.velocity.1 = -p.velocity.1;
+    if bdown == 0.0 && p.velocity.1 < 0.0{
+        p.velocity.1 = -p.velocity.1 * factor;
     }
-    if bup == 0.0 {
-        p.velocity.1 = -p.velocity.1;
+    if bup == 0.0 && p.velocity.1 > 0.0 {
+        p.velocity.1 = -p.velocity.1 * factor;
     }
 }
 

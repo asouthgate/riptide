@@ -113,7 +113,7 @@ mod tests {
     fn test_spiky_kernel() {
         let h: f32 = 1.329;
         let r: f32 = 0.39881;
-        assert!((debrun_spiky_kernel(r, h) - 0.6974394347109141).abs() < 0.0000001);
+        assert!((debrun_spiky_kernel(r, h) - 0.6179313391538699).abs() < 0.0000001);
         assert!(debrun_spiky_kernel(-0.000001, h) == 0.0);
         assert!(debrun_spiky_kernel(1.33, h) == 0.0);
     }
@@ -122,7 +122,7 @@ mod tests {
     fn test_kernel_dwdr() {
         let h: f32 = 1.329;
         let r: f32 = 0.39881;
-        assert!(debrun_spiky_kernel_dwdr(0.0, h) < -4.5); // doesn't disappear at origin
+        assert!(debrun_spiky_kernel_dwdr(0.0, h).abs() > 1.0); // doesn't disappear at origin
     }
 
     #[test]

@@ -105,16 +105,34 @@ pub fn update_pressures(particles: &mut Vec<Particle>, rho0: f32, c2: f32) {
     }
 }
 
-pub fn update_velocities_and_positions(particles: &mut Vec<Particle>, dt: f32) {
-    for k in 0..particles.len() {
+pub fn update_body_forces(particles: &mut Vec<Particle>, n_real_particles: usize, body_force: (f32, f32), dt: f32) {
+    for k in 0..n_real_particles {
+        particles[k].f_body = body_force;
+    }
+}
+
+pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
+    for k in 0..n_real_particles {
+        particles[k].velocity = (
+            particles[k].velocity.0 + (dt / particles[k].mass) * particles[k].f_body.0,
+            particles[k].velocity.1 + (dt / particles[k].mass) * particles[k].f_body.1
+        );
+    }
+}
+
+
+pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
+    for k in 0..n_real_particles {
         particles[k].velocity = (
             particles[k].velocity.0 + (dt / particles[k].mass) * particles[k].f_hydro.0,
             particles[k].velocity.1 + (dt / particles[k].mass) * particles[k].f_hydro.1
         );
-        particles[k].position = (
-            particles[k].position.0 + dt * particles[k].velocity.0,
-            particles[k].position.1 + dt * particles[k].velocity.1
-        );
+        attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.5);
+        // particles[k].position = (
+        //     particles[k].position.0 + dt * particles[k].velocity.0,
+        //     particles[k].position.1 + dt * particles[k].velocity.1
+        // );
+        update_particle_position(fs, pg, &mut particles[k], dt)
     }
 }
 
@@ -131,12 +149,14 @@ pub fn integrate(
     // compute viscous and body forces & update velocity (one particle at a time)
     // when i say one at a time, update velocity i, which effects calc of velocity i + 1 
     // it's data dependent, not parallelizable updates
+    update_body_forces(particles, n_real_particles, body_force, dt);
+    update_velocities(particles, n_real_particles, dt);
     // update_viscous_and_body_forces(pg, index, particles, h, max_dist, mu, dt)
     update_pressures(particles, rho0, c2);
     let tpressure = Instant::now();
     update_pressure_forces(pg, index, particles, h, max_dist, n_real_particles);
     let tpressureforce = Instant::now();
-    update_velocities_and_positions(particles, dt);    
+    update_velocities_and_positions(pg, fs, particles, n_real_particles, dt);    
     let tpos = Instant::now();
     println!(
         "{:?} {:?} {:?} {:?}",
@@ -215,7 +235,7 @@ mod tests {
             for p in &particles {
                 println!    ("mass: {} density {} pressure {}, f ({} {})", p.mass, p.density, p.pressure, p.f_hydro.0, p.f_hydro.1);
             }
-            update_velocities_and_positions(&mut particles, dt);
+            update_velocities_and_positions(&mut particles, 2, dt);
             let mut new_err = 0.0;
             for p in &particles {
                 new_err += (p.density - rho0).abs()

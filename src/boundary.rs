@@ -48,7 +48,7 @@ pub fn get_ghost_particles_naive(fs: &FluidState, pg: &PixelGrid) -> Vec<Particl
     res
 }
 
-pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, i0: i32, ie: i32, j0: i32, je: i32, n: i32) -> Vec<Particle> {
+pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i32, n: i32) -> Vec<Particle> {
     let mut res = vec![];
     for i in i0..ie {
         let (mut x, mut y) = pg.worldxy2xy(j0 as f32, i as f32);
