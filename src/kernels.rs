@@ -86,6 +86,7 @@ pub fn cal_r(dx: f32, dy: f32) -> f32 {
 
 pub fn debrun_spiky_kernel_grad(dx: f32, dy: f32, h: f32) -> (f32, f32) {
     let r = cal_r(dx, dy);
+    // println!("\t \t \t {}", r);
     let dwdror = debrun_spiky_kernel_dwdr(r, h) / r;
     (dx * dwdror, dy * dwdror)
 }

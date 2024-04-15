@@ -39,20 +39,20 @@ pub fn update_densities(
         let y = particles[i].get_y();
         assert!(!x.is_nan());
         assert!(!y.is_nan());
-        let nbrs = index.get_nbrs(&pg, x, y, max_dist);
-        let mut n_nbrs = 0.0;
+        // let mut nbrs = index.get_nbrs(&pg, x, y, max_dist);
+        // nbrs.push(i);
         particles[i].density = 0.0;
-        for nbrj in nbrs {
-            let dx = particles[i].get_x() - particles[nbrj].get_x();
-            let dy = particles[i].get_y() - particles[nbrj].get_y();
+        let mut density_sum = 0.0;
+        // println!("{}", nbrs.len());
+        for nbrj in particles[i].nbrs.iter() {
+            let dx = x - particles[*nbrj].get_x();
+            let dy = y - particles[*nbrj].get_y();
             let rij = (dx.powi(2) + dy.powi(2)).powf(0.5);
-            if rij <= h {
-                n_nbrs += 1.0;
-            }
-            let contrib = cal_rho_ij(particles[nbrj].mass, rij, h);
-            particles[i].density += contrib; 
-            assert!(!particles[i].density.is_nan());
+            let contrib = cal_rho_ij(particles[*nbrj].mass, rij, h);
+            density_sum += contrib; 
+            assert!(!density_sum.is_nan());
         }
+        particles[i].density = density_sum;
         // correct the density for isolated particles, otherwise it can be too high
         // let wmax = cal_rho_ij(particles[i].mass, 0.0, h);
         // let rhocorr = (particles[i].density + (n_nbrs as f32 - 1.0) * wmax) / wmax;
@@ -69,9 +69,11 @@ pub fn update_pressure_forces(
         let y = particles[i].get_y();
         assert!(!x.is_nan());
         assert!(!y.is_nan());
-        let nbrs = index.get_nbrs(&pg, x, y, max_dist);
         particles[i].f_hydro = (0.0, 0.0);
-        for nbrj in nbrs {
+        let mut ftot = (0.0, 0.0);
+        for _nbrj in particles[i].nbrs.iter() {
+            let nbrj = *_nbrj;
+
             if nbrj == i {
                 continue;
             }
@@ -80,8 +82,11 @@ pub fn update_pressure_forces(
             assert!(!dx.is_nan());
             assert!(!dy.is_nan());
             let grad = debrun_spiky_kernel_grad(dx, dy, h);
+            // println!("\t {} {} {} {} {} {}", i, nbrj, dx, dy, grad.0, grad.1);
             assert!(!grad.0.is_nan());
             assert!(!grad.1.is_nan());
+            assert!(particles[i].density != 0.0);
+            assert!(particles[nbrj].density != 0.0);
             let fij = cal_pressure_force_ij(
                 particles[i].pressure,
                 particles[nbrj].pressure,
@@ -90,12 +95,16 @@ pub fn update_pressure_forces(
                 particles[nbrj].mass,
                 grad
             );
-            particles[i].f_hydro.0 += fij.0;
-            particles[i].f_hydro.1 += fij.1;
+            assert!(!fij.0.is_nan());
+            assert!(!fij.1.is_nan());
+
+            ftot.0 += fij.0;
+            ftot.1 += fij.1;
 
             assert!(!particles[i].f_hydro.0.is_nan());
             assert!(!particles[i].f_hydro.1.is_nan());
         }
+        particles[i].f_hydro = ftot;
     }
 }
 
@@ -116,37 +125,41 @@ pub fn update_viscous_forces_and_velocities(
     n_real_particles: usize, h: f32, max_dist: f32, mu: f32, dt: f32
 ) {
     for i in 0..n_real_particles {
-        particles[i].f_drag = (0.0, 0.0);
-
         let x = particles[i].get_x();
         let y = particles[i].get_y();
+        particles[i].f_drag = (0.0, 0.0);
         assert!(!x.is_nan());
         assert!(!y.is_nan());
-        let nbrs = index.get_nbrs(&pg, x, y, max_dist);
-        particles[i].f_hydro = (0.0, 0.0);
-        for nbrj in nbrs {
+        let mut f_drag_tot = (0.0, 0.0);
+        for _nbrj in particles[i].nbrs.iter() {
+            let nbrj = *_nbrj;
+
             if nbrj == i {
                 continue;
             }
             let dx = particles[i].get_x() - particles[nbrj].get_x();
             let dy = particles[i].get_y() - particles[nbrj].get_y();
+            let r = (dx.powi(2) + dy.powi(2)).powf(0.5);
             // calculate grad
             let grad = debrun_spiky_kernel_grad(dx, dy, h);
             // calculate velocity
-            let du = particles[i].get_u() - particles[nbrj].get_v();
-            let dv = particles[i].get_u() - particles[nbrj].get_v();
+            let du = particles[i].get_u() - particles[nbrj].get_u();
+            let dv = particles[i].get_v() - particles[nbrj].get_v();
             // take dot product
-            let dot = du * grad.0 + dv * grad.1;
-            // particles[i].f_hydro += dot * particles[nbrj].mass / particles[nbrj].density;
+            // let dot = du * grad.0 + dv * grad.1;
+            let lap = debrun_spiky_kernel_lap(r, h);
+            f_drag_tot.0 += lap * du * particles[nbrj].mass / particles[nbrj].density;
+            f_drag_tot.1 += lap * dv * particles[nbrj].mass / particles[nbrj].density;
             // take min (needs to be negative)
             // multiply by mu
-
         }
-    
+        f_drag_tot.0 *= mu;
+        f_drag_tot.1 *= mu;
+        particles[i].f_drag = f_drag_tot;
 
         particles[i].velocity = (
-            particles[i].velocity.0 + (dt / particles[i].mass) * particles[i].f_body.0,
-            particles[i].velocity.1 + (dt / particles[i].mass) * particles[i].f_body.1
+            particles[i].velocity.0 + (dt / particles[i].mass) * (particles[i].f_body.0 + particles[i].f_drag.0),
+            particles[i].velocity.1 + (dt / particles[i].mass) * (particles[i].f_body.1 + particles[i].f_drag.1)
         );
     }
 }
@@ -164,8 +177,8 @@ pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize,
 pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
     for k in 0..n_real_particles {
         particles[k].velocity = (
-            particles[k].velocity.0 + (dt / particles[k].density) * particles[k].f_hydro.0,
-            particles[k].velocity.1 + (dt / particles[k].density) * particles[k].f_hydro.1
+            particles[k].velocity.0 + (dt / particles[k].mass) * particles[k].f_hydro.0,
+            particles[k].velocity.1 + (dt / particles[k].mass) * particles[k].f_hydro.1
         );
         attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.5);
         // particles[k].position = (
@@ -181,9 +194,17 @@ pub fn integrate(
     particles: &mut Vec<Particle>, n_real_particles: usize,
     rho0: f32, c2: f32, h: f32, dt: f32, body_force: (f32, f32), mu: f32
 ) {
-    index.update(pg, particles);
-    let max_dist = h;
     let t0 = Instant::now();
+    let max_dist = h;
+    index.update(pg, particles);
+    let mut avg_nbrs = 0.0;
+    for i in 0..particles.len() {
+        particles[i].nbrs = index.get_nbrs(&pg, particles[i].get_x(), particles[i].get_y(), max_dist);
+        avg_nbrs += particles[i].nbrs.len() as f32;
+    }
+    avg_nbrs /= particles.len() as f32;
+    println!("Average nbr size: {}", avg_nbrs);
+    let tindex = Instant::now();
     update_densities(pg, index, particles, h, max_dist,);
     let tdensity = Instant::now();
     // compute viscous and body forces & update velocity (one particle at a time)
@@ -199,8 +220,9 @@ pub fn integrate(
     update_velocities_and_positions(pg, fs, particles, n_real_particles, dt);    
     let tpos = Instant::now();
     println!(
-        "{:?} {:?} {:?} {:?}",
-        tdensity.duration_since(t0),
+        "{:?} {:?} {:?} {:?} {:?}",
+        tindex.duration_since(t0),
+        tdensity.duration_since(tindex),
         tpressure.duration_since(tdensity),
         tpressureforce.duration_since(tpressure),
         tpos.duration_since(tpressureforce),
