@@ -40,6 +40,10 @@ pub fn cubic_spline_grad(dx: f32, dy: f32, r: f32, h: f32) -> (f32, f32) {
     }
 }
 
+fn get_debrun_coeff(h: f32) -> f32 { // TWO DIMENSIONAL CASE
+    10.0 / (PI * h.powi(5))
+}
+
 pub fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
     match r {
         _r if r < 0.0 => {
@@ -49,8 +53,7 @@ pub fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
             0.0
         }
         _ => {
-            let coeff = 10.0 / (PI * h.powi(5)); // TWO DIMENSIONAL CASE
-            coeff * (h - r).powi(3)
+            get_debrun_coeff(h) * (h - r).powi(3)
         }
     }
 }
@@ -64,15 +67,16 @@ pub fn debrun_spiky_kernel_dwdr(r: f32, h: f32) -> f32 {
             0.0
         }
         _ => {
-            let coeff = 10.0 / (PI * h.powi(6));
+            let coeff = get_debrun_coeff(h)  / h;
             - 3.0 * coeff * (h - r).powi(2)
         }
     }
 }
 
 pub fn debrun_spiky_kernel_lap(r: f32, h: f32) -> f32 {
+    let coeff = get_debrun_coeff(h) / h;
     // this is not TOO tricky to derive, but will take some work to get to
-    (12.0 * h) - ( 3.0 * h.powi(2) / r ) - ( 9.0 * r )
+    coeff * ( (12.0 * h) - ( 3.0 * h.powi(2) / r ) - ( 9.0 * r ) )
 
 }
 
@@ -150,7 +154,7 @@ mod tests {
         let r = 4.601086828130937;
         let h = 1.2;
         let l = debrun_spiky_kernel_lap(r, h);
-        assert!(( -27.948690054856538 - l ).abs() < 0.00001 );
+        assert!(( -27.948690054856538 * get_debrun_coeff(h) / h - l ).abs() < 0.00001 );
     }
 
 
