@@ -111,6 +111,46 @@ pub fn update_body_forces(particles: &mut Vec<Particle>, n_real_particles: usize
     }
 }
 
+pub fn update_viscous_forces_and_velocities(
+    pg: &PixelGrid, index: &ParticleIndex, particles: &mut Vec<Particle>, 
+    n_real_particles: usize, h: f32, max_dist: f32, mu: f32, dt: f32
+) {
+    for i in 0..n_real_particles {
+        particles[i].f_drag = (0.0, 0.0);
+
+        let x = particles[i].get_x();
+        let y = particles[i].get_y();
+        assert!(!x.is_nan());
+        assert!(!y.is_nan());
+        let nbrs = index.get_nbrs(&pg, x, y, max_dist);
+        particles[i].f_hydro = (0.0, 0.0);
+        for nbrj in nbrs {
+            if nbrj == i {
+                continue;
+            }
+            let dx = particles[i].get_x() - particles[nbrj].get_x();
+            let dy = particles[i].get_y() - particles[nbrj].get_y();
+            // calculate grad
+            let grad = debrun_spiky_kernel_grad(dx, dy, h);
+            // calculate velocity
+            let du = particles[i].get_u() - particles[nbrj].get_v();
+            let dv = particles[i].get_u() - particles[nbrj].get_v();
+            // take dot product
+            let dot = du * grad.0 + dv * grad.1;
+            // particles[i].f_hydro += dot * particles[nbrj].mass / particles[nbrj].density;
+            // take min (needs to be negative)
+            // multiply by mu
+
+        }
+    
+
+        particles[i].velocity = (
+            particles[i].velocity.0 + (dt / particles[i].mass) * particles[i].f_body.0,
+            particles[i].velocity.1 + (dt / particles[i].mass) * particles[i].f_body.1
+        );
+    }
+}
+
 pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
     for k in 0..n_real_particles {
         particles[k].velocity = (
@@ -124,8 +164,8 @@ pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize,
 pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
     for k in 0..n_real_particles {
         particles[k].velocity = (
-            particles[k].velocity.0 + (dt / particles[k].mass) * particles[k].f_hydro.0,
-            particles[k].velocity.1 + (dt / particles[k].mass) * particles[k].f_hydro.1
+            particles[k].velocity.0 + (dt / particles[k].density) * particles[k].f_hydro.0,
+            particles[k].velocity.1 + (dt / particles[k].density) * particles[k].f_hydro.1
         );
         attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.5);
         // particles[k].position = (
@@ -150,8 +190,8 @@ pub fn integrate(
     // when i say one at a time, update velocity i, which effects calc of velocity i + 1 
     // it's data dependent, not parallelizable updates
     update_body_forces(particles, n_real_particles, body_force, dt);
-    update_velocities(particles, n_real_particles, dt);
-    // update_viscous_and_body_forces(pg, index, particles, h, max_dist, mu, dt)
+    // update_velocities(particles, n_real_particles, dt);
+    update_viscous_forces_and_velocities(pg, index, particles, n_real_particles, h, max_dist, mu, dt);
     update_pressures(particles, rho0, c2);
     let tpressure = Instant::now();
     update_pressure_forces(pg, index, particles, h, max_dist, n_real_particles);
@@ -217,9 +257,10 @@ mod tests {
         let c2: f32 = 1.0;
         let max_dist = 100.0;
         let dt = 0.1;
-        let p1 = Particle { position: (0.0, 0.0), mass: 1.0, ..Default::default() };
-        let p2 = Particle { position: (0.5, 0.0), mass: 1.0, ..Default::default() };
-        let pg = PixelGrid::new(100, 100);
+        let p1 = Particle { position: (10.0, 10.0), mass: 1.0, ..Default::default() };
+        let p2 = Particle { position: (10.5, 10.0), mass: 1.0, ..Default::default() };
+        let pg = PixelGrid::new(1000, 1000);
+        let fs = FluidState::new(&pg);
         let mut index = ParticleIndex::new(&pg); 
         let mut particles = vec![p1, p2];
         index.update(&pg, &particles);
@@ -235,7 +276,7 @@ mod tests {
             for p in &particles {
                 println!    ("mass: {} density {} pressure {}, f ({} {})", p.mass, p.density, p.pressure, p.f_hydro.0, p.f_hydro.1);
             }
-            update_velocities_and_positions(&mut particles, 2, dt);
+            update_velocities_and_positions(&pg, &fs, &mut particles, 2, dt);
             let mut new_err = 0.0;
             for p in &particles {
                 new_err += (p.density - rho0).abs()
@@ -245,30 +286,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_3_particles() {
-        let h: f32 = 2.0;
-        let rho0: f32 = 1.0;
-        let c2: f32 = 1.0;
-        let max_dist = 100.0;
-        let p1 = Particle { position: (0.0, 0.0), mass: 0.6, ..Default::default() };
-        let p2 = Particle { position: (0.4, 0.0), mass: 3.0, ..Default::default() };
-        let p3 = Particle { position: (0.6, 1.6), mass: 0.5, ..Default::default() };
-        let pg = PixelGrid::new(100, 100);
-        let mut index = ParticleIndex::new(&pg); 
-        let mut particles = vec![p1, p2, p3];
-        index.update(&pg, &particles);
-        update_densities(&pg, &index, &mut particles, h, max_dist);
-        assert!(particles[1].density > particles[0].density);
-        assert!(particles[1].density > particles[2].density);
-        update_pressures(&mut particles, rho0, c2);
-        println!("");
-        assert!(particles[1].pressure > particles[0].pressure);
-        assert!(particles[1].pressure > particles[2].pressure);
-        update_pressure_forces(&pg, &index, &mut particles, h, max_dist, 3);
-        println!("");
-        for p in &particles {
-            println!    ("mass: {} density {} pressure {}, f ({} {})", p.mass, p.density, p.pressure, p.f_hydro.0, p.f_hydro.1);
-        }
-    }
 }

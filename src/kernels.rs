@@ -70,6 +70,12 @@ pub fn debrun_spiky_kernel_dwdr(r: f32, h: f32) -> f32 {
     }
 }
 
+pub fn debrun_spiky_kernel_lap(r: f32, h: f32) -> f32 {
+    // this is not TOO tricky to derive, but will take some work to get to
+    (12.0 * h) - ( 3.0 * h.powi(2) / r ) - ( 9.0 * r )
+
+}
+
 pub fn cal_r(dx: f32, dy: f32) -> f32 {
     (dx.powi(2) + dy.powi(2)).powf(0.5)
 }
@@ -138,5 +144,14 @@ mod tests {
         assert!(grad.0 < 0.0); // we expect the gradient to be pointing downwards
         assert!(grad.1 < 0.0);
     }
+
+    #[test]
+    fn test_debrun_spiky_kernel_lap() {
+        let r = 4.601086828130937;
+        let h = 1.2;
+        let l = debrun_spiky_kernel_lap(r, h);
+        assert!(( -27.948690054856538 - l ).abs() < 0.00001 );
+    }
+
 
 }
