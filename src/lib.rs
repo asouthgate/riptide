@@ -5,6 +5,7 @@ pub mod kernels;
 pub mod momentum;
 pub mod particle;
 pub mod particle_index;
+pub mod rigid_body;
 pub mod pixelgrid;
 pub mod pressure;
 pub mod sph;
