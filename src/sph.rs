@@ -1,10 +1,18 @@
-use crate::particle::{Particle, update_particle_velocity, update_particle_position, attenuate_particle_velocity_at_boundary};
+use crate::particle::{Particle, update_particle_position, attenuate_particle_velocity_at_boundary};
 use crate::fluid_state::FluidState;
 use crate::pixelgrid::PixelGrid;
 use crate::particle_index::*;
 use crate::kernels::*;
-use std::time::{Instant, Duration};
+use std::time::{Instant};
 
+pub struct ParticleConstants {
+    /// These structures are intentionally simple
+    /// We do not want high abstraction level
+    /// We need to be able to port to GPU code easily
+    rho0_vec: Vec<f32>, // Vector; one for each type of Particle
+    c2_vec: Vec<f32>, // speed of sound squared: one for each type of Particle
+    mu_mat: Vec<Vec<f32>> // viscosity; one for each PAIRWISE COMBINATION of Particle types
+}
 
 fn cal_pressure(rho: f32, rho0: f32, c: f32) -> f32 {
     c * (rho - rho0)
@@ -27,12 +35,12 @@ fn cal_pressure_force_ij(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32, grad: 
     (pforce_coefficient * grad.0, pforce_coefficient * grad.1)
 }
 
-fn cal_pressure_acceleration_ij(pi: f32, force: (f32, f32)) -> (f32, f32) {
-    (force.0 / pi, force.1 / pi)
-}
+// fn cal_pressure_acceleration_ij(pi: f32, force: (f32, f32)) -> (f32, f32) {
+//     (force.0 / pi, force.1 / pi)
+// }
 
 pub fn update_densities(
-    pg: &PixelGrid, index: &ParticleIndex, particles: &mut Vec<Particle>, h: f32, max_dist: f32
+    particles: &mut Vec<Particle>, h: f32
 ) {
     for i in 0..particles.len() {
         let x = particles[i].get_x();
@@ -62,7 +70,7 @@ pub fn update_densities(
 }
 
 pub fn update_pressure_forces(
-    pg: &PixelGrid, index: &ParticleIndex, particles: &mut Vec<Particle>, h: f32, max_dist: f32, n_real_particles: usize
+    particles: &mut Vec<Particle>, h: f32, n_real_particles: usize
 ) {
     for i in 0..n_real_particles {
         let x = particles[i].get_x();
@@ -108,21 +116,22 @@ pub fn update_pressure_forces(
     }
 }
 
-pub fn update_pressures(particles: &mut Vec<Particle>, rho0: f32, c2: f32) {
+pub fn update_pressures(particles: &mut Vec<Particle>, rho0_vec: &Vec<f32>, c2_vec: &Vec<f32>) {
     for k in 0..particles.len() {
-        particles[k].pressure = cal_pressure(particles[k].density, rho0, c2);
+        let pk = particles[k].particle_type;
+        particles[k].pressure = cal_pressure(particles[k].density, rho0_vec[pk], c2_vec[pk]);
     }
 }
 
-pub fn update_body_forces(particles: &mut Vec<Particle>, n_real_particles: usize, body_force: (f32, f32), dt: f32) {
+pub fn update_body_forces(particles: &mut Vec<Particle>, n_real_particles: usize, body_force: (f32, f32)) {
     for k in 0..n_real_particles {
         particles[k].f_body = body_force;
     }
 }
 
 pub fn update_viscous_forces_and_velocities(
-    pg: &PixelGrid, index: &ParticleIndex, particles: &mut Vec<Particle>, 
-    n_real_particles: usize, h: f32, max_dist: f32, mu: f32, dt: f32
+    particles: &mut Vec<Particle>, 
+    n_real_particles: usize, h: f32, mu_mat: &Vec<Vec<f32>>, dt: f32
 ) {
     for i in 0..n_real_particles {
         let x = particles[i].get_x();
@@ -141,20 +150,20 @@ pub fn update_viscous_forces_and_velocities(
             let dy = particles[i].get_y() - particles[nbrj].get_y();
             let r = (dx.powi(2) + dy.powi(2)).powf(0.5);
             // calculate grad
-            let grad = debrun_spiky_kernel_grad(dx, dy, h);
+            // let grad = debrun_spiky_kernel_grad(dx, dy, h);
             // calculate velocity
             let du = particles[i].get_u() - particles[nbrj].get_u();
             let dv = particles[i].get_v() - particles[nbrj].get_v();
             // take dot product
             // let dot = du * grad.0 + dv * grad.1;
             let lap = debrun_spiky_kernel_lap(r, h);
-            f_drag_tot.0 += lap * du * particles[nbrj].mass / particles[nbrj].density;
-            f_drag_tot.1 += lap * dv * particles[nbrj].mass / particles[nbrj].density;
             // take min (needs to be negative)
             // multiply by mu
+            let mu = mu_mat[particles[i].particle_type][particles[nbrj].particle_type];
+            f_drag_tot.0 += mu * lap * du * particles[nbrj].mass / particles[nbrj].density;
+            f_drag_tot.1 += mu * lap * dv * particles[nbrj].mass / particles[nbrj].density;
+
         }
-        f_drag_tot.0 *= mu;
-        f_drag_tot.1 *= mu;
         particles[i].f_drag = f_drag_tot;
 
         particles[i].velocity = (
@@ -192,7 +201,8 @@ pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particle
 pub fn integrate(
     pg: &PixelGrid, fs: &FluidState, index: &mut ParticleIndex,
     particles: &mut Vec<Particle>, n_real_particles: usize,
-    rho0: f32, c2: f32, h: f32, dt: f32, body_force: (f32, f32), mu: f32
+    particle_constants: &mut ParticleConstants, dt: f32,
+    h: f32, body_force: (f32, f32)
 ) {
     let t0 = Instant::now();
     let max_dist = h;
@@ -205,17 +215,19 @@ pub fn integrate(
     avg_nbrs /= particles.len() as f32;
     println!("Average nbr size: {}", avg_nbrs);
     let tindex = Instant::now();
-    update_densities(pg, index, particles, h, max_dist,);
+    update_densities(particles, h);
     let tdensity = Instant::now();
     // compute viscous and body forces & update velocity (one particle at a time)
     // when i say one at a time, update velocity i, which effects calc of velocity i + 1 
     // it's data dependent, not parallelizable updates
-    update_body_forces(particles, n_real_particles, body_force, dt);
+    update_body_forces(particles, n_real_particles, body_force);
     // update_velocities(particles, n_real_particles, dt);
-    update_viscous_forces_and_velocities(pg, index, particles, n_real_particles, h, max_dist, mu, dt);
-    update_pressures(particles, rho0, c2);
+    update_viscous_forces_and_velocities(
+        particles, n_real_particles, h, &particle_constants.mu_mat, dt
+    );
+    update_pressures(particles, &particle_constants.rho0_vec, &particle_constants.c2_vec);
     let tpressure = Instant::now();
-    update_pressure_forces(pg, index, particles, h, max_dist, n_real_particles);
+    update_pressure_forces(particles, h, n_real_particles);
     let tpressureforce = Instant::now();
     update_velocities_and_positions(pg, fs, particles, n_real_particles, dt);    
     let tpos = Instant::now();
@@ -233,8 +245,6 @@ pub fn integrate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::prelude::*;
-    use rand::{SeedableRng, rngs::StdRng};
 
     #[test]
     fn test_cal_p() {
@@ -257,27 +267,27 @@ mod tests {
 
     #[test]
     fn test_cal_pressure_force_ij() {
-        let h: f32 = 1.329;
-        let dx: f32 = 0.1361;
-        let dy: f32 = 0.9981;
-        let r: f32 = cal_r(dx, dy);
-        let h = 1.8;
-        let grad = debrun_spiky_kernel_grad(dx, dy, h);
-        let rhoi = 1.0;
-        let rhoj = 2.0;
-        let pi = cal_pressure(rhoi, 0.0, 1.0);
-        let pj = cal_pressure(rhoj, 0.0, 1.0);
-        assert!(pj > pi);
-        let mj = 1.0;
-        let pf = cal_pressure_force_ij(pi, pj, rhoi, rhoj, mj, grad);
+        // let h: f32 = 1.329;
+        // let dx: f32 = 0.1361;
+        // let dy: f32 = 0.9981;
+        // let r: f32 = cal_r(dx, dy);
+        // let h = 1.8;
+        // let grad = debrun_spiky_kernel_grad(dx, dy, h);
+        // let rhoi = 1.0;
+        // let rhoj = 2.0;
+        // let pi = cal_pressure(rhoi, 0.0, 1.0);
+        // let pj = cal_pressure(rhoj, 0.0, 1.0);
+        // assert!(pj > pi);
+        // let mj = 1.0;
+        // let pf = cal_pressure_force_ij(pi, pj, rhoi, rhoj, mj, grad);
     }
 
     #[test]
     fn test_2_particles() {
         let h: f32 = 2.0;
-        let rho0: f32 = 1.0;
-        let c2: f32 = 1.0;
-        let max_dist = 100.0;
+        let rho0_vec = vec![1.0];
+        let c2_vec = vec![1.0];
+        // let max_dist = 100.0;
         let dt = 0.1;
         let p1 = Particle { position: (10.0, 10.0), mass: 1.0, ..Default::default() };
         let p2 = Particle { position: (10.5, 10.0), mass: 1.0, ..Default::default() };
@@ -287,13 +297,13 @@ mod tests {
         let mut particles = vec![p1, p2];
         index.update(&pg, &particles);
         let mut prev_err = 99999.0;
-        for j in 0..10 {
-            update_densities(&pg, &index, &mut particles, h, max_dist);
+        for _ in 0..10 {
+            update_densities(&mut particles, h);
             assert!(particles[1].density == particles[0].density);
-            update_pressures(&mut particles, rho0, c2);
+            update_pressures(&mut particles, &rho0_vec, &c2_vec);
             println!("");
             assert!(particles[0].pressure == particles[1].pressure);
-            update_pressure_forces(&pg, &index, &mut particles, h, max_dist, 2);
+            update_pressure_forces(&mut particles, h, 2);
             println!("");
             for p in &particles {
                 println!    ("mass: {} density {} pressure {}, f ({} {})", p.mass, p.density, p.pressure, p.f_hydro.0, p.f_hydro.1);
@@ -301,6 +311,7 @@ mod tests {
             update_velocities_and_positions(&pg, &fs, &mut particles, 2, dt);
             let mut new_err = 0.0;
             for p in &particles {
+                let rho0 = rho0_vec[p.particle_type];
                 new_err += (p.density - rho0).abs()
             }    
             assert!(new_err <= prev_err);

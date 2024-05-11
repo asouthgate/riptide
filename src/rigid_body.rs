@@ -119,7 +119,6 @@ impl RigidBody {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::prelude::*;
     use rand::{SeedableRng, rngs::StdRng};
 
     #[test]
@@ -127,7 +126,7 @@ mod tests {
         let pg = PixelGrid::new(20, 4);  
         let mut fs = FluidState::new(&pg);
         let seed_value = 42;
-        let mut rng = StdRng::seed_from_u64(seed_value);
+        let rng = StdRng::seed_from_u64(seed_value);
         for j in 0..pg.n {
             for i in 0..pg.m {
                 let ak = i * pg.n + j;

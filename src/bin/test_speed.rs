@@ -14,22 +14,22 @@ fn main() {
     let mut fs = FluidState::new(&pg);
     let ps = JacobiPressureSolver {};
 
-    let rho0 = 1.0;
-    let c0 = 0.1;
-    let dt = 1.0;
-    let h = 1.0;
-    let mut particles: Vec<Particle> = vec![];
-    for i in (1..pg.m-1).step_by(32) {
-        for j in (1..pg.n-1).step_by(32) {
-            particles.push(Particle{
-                position: (j as f32 + pg.dx * 0.5, i as f32 + pg.dy * 0.5), mass: 1.0,
-                .. Default::default()
-            });
-        }
-    }
-    let n_real_particles = particles.len();
-    let mut particle_index = ParticleIndex::new(&pg);
-    particles.extend(get_ghost_particles_naive(&fs, &pg));
+    // let rho0 = 1.0;
+    // let c0 = 0.1;
+    // let dt = 1.0;
+    // let h = 1.0;
+    // let mut particles: Vec<Particle> = vec![];
+    // for i in (1..pg.m-1).step_by(32) {
+    //     for j in (1..pg.n-1).step_by(32) {
+    //         particles.push(Particle{
+    //             position: (j as f32 + pg.dx * 0.5, i as f32 + pg.dy * 0.5), mass: 1.0,
+    //             .. Default::default()
+    //         });
+    //     }
+    // }
+    // let n_real_particles = particles.len();
+    // let mut particle_index = ParticleIndex::new(&pg);
+    // particles.extend(get_ghost_particles_naive(&fs, &pg));
 
 
     let iterations = 10;
@@ -71,6 +71,7 @@ fn main() {
         //     rho0, c0, h, dt, (0.0, 0.0), 0.0
         // );
         let t6 = Instant::now();
+        sph_time = t6-t5;
         
     }
 

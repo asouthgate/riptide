@@ -24,7 +24,7 @@ pub struct Particle {
     pub t: f32,
     pub lifespan: f32,
     pub rgba: (u8, u8, u8, u8),
-    pub particle_type: u32 // encoded as an int, define your own
+    pub particle_type: usize // encoded as an int, define your own
 }
 
 impl Default for Particle {
@@ -266,7 +266,6 @@ mod tests {
         }
         for _it in 0..100 {
             for p in &mut particles {
-                let ak = pg.xy2ak(p.get_x(), p.get_y());
                 p.evolve(&fs, &pg, 1.0);
                 assert!(pg.sample(&fs.boundary, p.get_x(), p.get_y()) > 0.0);
             }
@@ -299,7 +298,7 @@ mod tests {
         pg.print_data(&fs.u);
         pg.print_data(&fs.v);
         pg.print_data(&fs.boundary);
-        let (mut px, mut py) = (0.0, 0.0);
+        let (mut px, mut py);
         for _it in 0..100 {
             (px, py) = cal_proposed_step(&fs, &pg, &mut p, 1.0);
             p.position.0 += px;

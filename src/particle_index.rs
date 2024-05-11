@@ -8,7 +8,7 @@ pub struct ParticleIndex {
 impl ParticleIndex {
     pub fn new(pg: &PixelGrid) -> Self {
         let mut slots = vec![];
-        for ak in 0..pg.mn {
+        for _ in 0..pg.mn {
             slots.push(vec![]);
         }
         ParticleIndex {
@@ -39,7 +39,6 @@ impl ParticleIndex {
         for y2 in i0..ie {
             for x2 in j0..je {
                 let ak = pg.xy2ak(x2 as f32, y2 as f32);
-                let mi = 0;
                 for ind in &self.slots[ak] {
                     result.push(*ind);
                 }
@@ -85,8 +84,6 @@ fn test_particle_index_count() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::prelude::*;
-    use rand::{SeedableRng, rngs::StdRng};
 
     #[test]
     fn test_particle_retrieval() {

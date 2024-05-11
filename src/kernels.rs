@@ -94,9 +94,6 @@ pub fn debrun_spiky_kernel_grad(dx: f32, dy: f32, h: f32) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::prelude::*;
-    use rand::{SeedableRng, rngs::StdRng};
-
 
     #[test]
     fn test_kernel() {
@@ -132,13 +129,11 @@ mod tests {
     #[test]
     fn test_kernel_dwdr() {
         let h: f32 = 1.329;
-        let r: f32 = 0.39881;
         assert!(debrun_spiky_kernel_dwdr(0.0, h).abs() > 1.0); // doesn't disappear at origin
     }
 
     #[test]
     fn test_kernel_grad() {
-        let h: f32 = 1.329;
         let dx: f32 = 0.1361;
         let dy: f32 = 0.9981;
         let r: f32 = cal_r(dx, dy);

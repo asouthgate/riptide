@@ -51,11 +51,11 @@ pub fn get_ghost_particles_naive(fs: &FluidState, pg: &PixelGrid) -> Vec<Particl
 pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i32, n: i32) -> Vec<Particle> {
     let mut res = vec![];
     for i in i0..ie {
-        let (mut x, mut y) = pg.worldxy2xy(j0 as f32, i as f32);
-        let mut ak = pg.xy2ak(x, y);
+        let (x, y) = pg.worldxy2xy(j0 as f32, i as f32);
+        let ak = pg.xy2ak(x, y);
         fs.boundary[ak] = 0.0;
-        let (mut x, mut y) = pg.worldxy2xy(je as f32, i as f32);
-        let mut ak = pg.xy2ak(x, y);
+        let (x, y) = pg.worldxy2xy(je as f32, i as f32);
+        let ak = pg.xy2ak(x, y);
         fs.boundary[ak] = 0.0;
         // res.push(Particle{
         //     position: (j0 as f32 + pg.dx / 2.0, i as f32 + pg.dy / 2.0),
@@ -73,11 +73,11 @@ pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie
         // });
     }
     for j in j0..je + 1 {
-        let (mut x, mut y) = pg.worldxy2xy(j as f32, i0 as f32);
-        let mut ak = pg.xy2ak(x, y);
+        let (x, y) = pg.worldxy2xy(j as f32, i0 as f32);
+        let ak = pg.xy2ak(x, y);
         fs.boundary[ak] = 0.0;
-        let (mut x, mut y) = pg.worldxy2xy(j as f32, ie as f32);
-        let mut ak = pg.xy2ak(x, y);
+        let (x, y) = pg.worldxy2xy(j as f32, ie as f32);
+        let ak = pg.xy2ak(x, y);
         fs.boundary[ak] = 0.0;
         // res.push(Particle{
         //     position: (j as f32 + pg.dx / 2.0, i0 as f32 + pg.dy / 2.0),
