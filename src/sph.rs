@@ -188,7 +188,8 @@ pub fn update_viscous_forces_and_velocities(
             }
             let dx = particles[i].get_x() - particles[nbrj].get_x();
             let dy = particles[i].get_y() - particles[nbrj].get_y();
-            let r = (dx.powi(2) + dy.powi(2)).powf(0.5);
+            let r2 = dx.powi(2) + dy.powi(2);
+            let r = (r2).powf(0.5);
             // calculate grad
             // let grad = debrun_spiky_kernel_grad(dx, dy, h);
             // calculate velocity
@@ -196,12 +197,18 @@ pub fn update_viscous_forces_and_velocities(
             let dv = particles[i].get_v() - particles[nbrj].get_v();
             // take dot product
             // let dot = du * grad.0 + dv * grad.1;
-            let lap = debrun_spiky_kernel_lap(r, h);
+            // let lap = debrun_spiky_kernel_lap(r, h);
+            let grad = debrun_spiky_kernel_grad(dx, dy, h);
+
             // take min (needs to be negative)
             // multiply by mu
-            let mu = mu_mat[particles[i].particle_type][particles[nbrj].particle_type];
-            f_drag_tot.0 += mu * lap * du * particles[nbrj].mass / particles[nbrj].density;
-            f_drag_tot.1 += mu * lap * dv * particles[nbrj].mass / particles[nbrj].density;
+            let muij = mu_mat[particles[i].particle_type][particles[nbrj].particle_type];
+            let a = 4.0 * particles[nbrj].mass / (particles[nbrj].density * particles[i].density);
+            let b = (grad.0 * du) + (grad.1 * dv);
+            let c = (dx / r2, dy / r2);
+
+            f_drag_tot.0 += muij *  a * b * c.0;
+            f_drag_tot.1 += muij *  a * b * c.1;
 
         }
         particles[i].f_drag = f_drag_tot;
