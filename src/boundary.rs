@@ -58,14 +58,14 @@ pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie
         let ak = pg.xy2ak(x, y);
         fs.boundary[ak] = 0.0;
         res.push(Particle{
-            position: (j0 as f32 - pg.dx / 2.0, i as f32),
+            position: (j0 as f32 - pg.dx / 10.0, i as f32),
             mass: 1.0,
             density: 1.0,
             pressure: 1.0,
             .. Default::default()
         });
         res.push(Particle{
-            position: (je as f32 + pg.dx / 2.0, i as f32),
+            position: (je as f32 + pg.dx / 10.0, i as f32),
             mass: 1.0,
             density: 1.0,
             pressure: 1.0,
@@ -80,17 +80,15 @@ pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie
         let ak = pg.xy2ak(x, y);
         fs.boundary[ak] = 0.0;
         res.push(Particle{
-            position: (j as f32, i0 as f32 - pg.dy / 2.0),
+            position: (j as f32, i0 as f32 - pg.dy / 10.0),
             mass: 1.0,
             density: 1.0,
             pressure: 1.0,
             .. Default::default()
         });
         res.push(Particle{
-            position: (j as f32, ie as f32 + pg.dy / 2.0),
+            position: (j as f32, ie as f32 + pg.dy / 10.0),
             mass: 1.0,
-            density: 1.0,
-            pressure: 1.0,
             .. Default::default()
         });
     }

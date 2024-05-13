@@ -216,8 +216,8 @@ pub fn update_viscous_forces_and_velocities(
         // NB: THERE IS A REASON THIS IS NOT IN A SEPARATE FUCNTION
         // FORCE/VEL ARE ITERATED
         particles[i].velocity = (
-            particles[i].velocity.0 + (dt / particles[i].density) * (particles[i].f_drag.0 + particles[i].f_surface.0),
-            particles[i].velocity.1 + (dt / particles[i].density) * (particles[i].f_drag.1 + particles[i].f_surface.1)
+            particles[i].velocity.0 + (dt / particles[i].density) * (particles[i].f_body.0 + particles[i].f_drag.0 + particles[i].f_surface.0),
+            particles[i].velocity.1 + (dt / particles[i].density) * (particles[i].f_body.1 + particles[i].f_drag.1 + particles[i].f_surface.1)
         );
     }
 }
@@ -235,8 +235,8 @@ pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize,
 pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
     for k in 0..n_real_particles {
         particles[k].velocity = (
-            particles[k].velocity.0 + (dt / particles[k].density) * (particles[k].f_body.0 + particles[k].f_hydro.0),
-            particles[k].velocity.1 + (dt / particles[k].density) * (particles[k].f_body.1 + particles[k].f_hydro.1)
+            particles[k].velocity.0 + (dt / particles[k].density) * (particles[k].f_hydro.0),
+            particles[k].velocity.1 + (dt / particles[k].density) * (particles[k].f_hydro.1)
         );
         // attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.1);
         // particles[k].position = (
