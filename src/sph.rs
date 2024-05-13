@@ -5,13 +5,16 @@ use crate::particle_index::*;
 use crate::kernels::*;
 use std::time::{Instant};
 
+const PI: f32 = 3.141592653589793;
+
 pub struct ParticleConstants {
     /// These structures are intentionally simple
     /// We do not want high abstraction level
     /// We need to be able to port to GPU code easily
-    rho0_vec: Vec<f32>, // Vector; one for each type of Particle
-    c2_vec: Vec<f32>, // speed of sound squared: one for each type of Particle
-    mu_mat: Vec<Vec<f32>> // viscosity; one for each PAIRWISE COMBINATION of Particle types
+    pub rho0_vec: Vec<f32>, // Vector; one for each type of Particle
+    pub c2_vec: Vec<f32>, // speed of sound squared: one for each type of Particle
+    pub mu_mat: Vec<Vec<f32>>, // viscosity; one for each PAIRWISE COMBINATION of Particle types
+    pub s_mat: Vec<Vec<f32>>, // viscosity; one for each PAIRWISE COMBINATION of Particle types
 }
 
 fn cal_pressure(rho: f32, rho0: f32, c: f32) -> f32 {
@@ -125,7 +128,44 @@ pub fn update_pressures(particles: &mut Vec<Particle>, rho0_vec: &Vec<f32>, c2_v
 
 pub fn update_body_forces(particles: &mut Vec<Particle>, n_real_particles: usize, body_force: (f32, f32)) {
     for k in 0..n_real_particles {
-        particles[k].f_body = body_force;
+        particles[k].f_body = (body_force.0 / particles[k].density, body_force.1 / particles[k].density);
+    }
+}
+
+pub fn update_surface_forces(
+    particles: &mut Vec<Particle>, 
+    n_real_particles: usize, 
+    h: f32, 
+    s_mat: &Vec<Vec<f32>>
+) {
+    let c_s = (3.0 * PI) / (2.0 * h);
+    for i in 0..n_real_particles {
+        let x = particles[i].get_x();
+        let y = particles[i].get_y();
+        particles[i].f_surface = (0.0, 0.0);
+        assert!(!x.is_nan());
+        assert!(!y.is_nan());
+        let mut f_surface_tot = (0.0, 0.0);
+        for _nbrj in particles[i].nbrs.iter() {
+            let nbrj = *_nbrj;
+
+            if nbrj == i {
+                continue;
+            }
+            let dx = particles[i].get_x() - particles[nbrj].get_x();
+            let dy = particles[i].get_y() - particles[nbrj].get_y();
+            let r = (dx.powi(2) + dy.powi(2)).powf(0.5);
+            if r < h {
+                let s = s_mat[particles[i].particle_type][particles[nbrj].particle_type];
+                f_surface_tot.0 += -s * (c_s * r).cos() * dx / r;
+                f_surface_tot.1 += -s * (c_s * r).cos() * dy / r;
+                // println!("\t{} {} \n \t {} {}", s_mat[0][0], s_mat[0][1], s_mat[1][0], s_mat[1][1]);
+                // println!("{} {} {} {} {}", 
+                //     s, particles[i].particle_type, particles[nbrj].particle_type, f_surface_tot.0, f_surface_tot.1
+                // )
+            }
+        }
+        particles[i].f_surface = f_surface_tot;
     }
 }
 
@@ -165,10 +205,11 @@ pub fn update_viscous_forces_and_velocities(
 
         }
         particles[i].f_drag = f_drag_tot;
-
+        // NB: THERE IS A REASON THIS IS NOT IN A SEPARATE FUCNTION
+        // FORCE/VEL ARE ITERATED
         particles[i].velocity = (
-            particles[i].velocity.0 + (dt / particles[i].density) * (particles[i].f_body.0 + particles[i].f_drag.0),
-            particles[i].velocity.1 + (dt / particles[i].density) * (particles[i].f_body.1 + particles[i].f_drag.1)
+            particles[i].velocity.0 + (dt / particles[i].density) * (particles[i].f_body.0 + particles[i].f_drag.0 + particles[i].f_surface.0),
+            particles[i].velocity.1 + (dt / particles[i].density) * (particles[i].f_body.1 + particles[i].f_drag.1 + particles[i].f_surface.1)
         );
     }
 }
@@ -201,15 +242,19 @@ pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particle
 pub fn integrate(
     pg: &PixelGrid, fs: &FluidState, index: &mut ParticleIndex,
     particles: &mut Vec<Particle>, n_real_particles: usize,
-    particle_constants: &mut ParticleConstants, dt: f32,
+    particle_constants: &ParticleConstants, dt: f32,
     h: f32, body_force: (f32, f32)
 ) {
     let t0 = Instant::now();
-    let max_dist = h;
+    let max_dist = h * 1.0;
     index.update(pg, particles);
     let mut avg_nbrs = 0.0;
     for i in 0..particles.len() {
         particles[i].nbrs = index.get_nbrs(&pg, particles[i].get_x(), particles[i].get_y(), max_dist);
+        cull_nbrs(i, particles, h);
+        // for nbrj in &particles[i].nbrs {
+        //     println!("{} {}", h, particles[*nbrj].dist(&particles[i]));
+        // }
         avg_nbrs += particles[i].nbrs.len() as f32;
     }
     avg_nbrs /= particles.len() as f32;
@@ -222,6 +267,9 @@ pub fn integrate(
     // it's data dependent, not parallelizable updates
     update_body_forces(particles, n_real_particles, body_force);
     // update_velocities(particles, n_real_particles, dt);
+    update_surface_forces(
+        particles, n_real_particles, h, &particle_constants.s_mat,
+    );
     update_viscous_forces_and_velocities(
         particles, n_real_particles, h, &particle_constants.mu_mat, dt
     );

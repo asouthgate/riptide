@@ -49,6 +49,16 @@ impl ParticleIndex {
     }
 }
 
+pub fn cull_nbrs(pi: usize, particles: &mut Vec<Particle>, h: f32) {
+    let mut new_nbrs = vec![];
+    for nbrj in &particles[pi].nbrs {
+        if particles[pi].dist(&particles[*nbrj]) <= h{
+            new_nbrs.push(*nbrj);
+        }
+    }
+    particles[pi].nbrs = new_nbrs;
+}
+
 
 #[test]
 fn test_particle_index_count() {

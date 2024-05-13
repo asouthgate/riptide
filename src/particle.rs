@@ -11,6 +11,7 @@ pub struct Particle {
     pub f_hydro: (f32, f32), // hydrostatic pressure force
     pub f_drag: (f32, f32), // viscous drag force
     pub f_body: (f32, f32),
+    pub f_surface: (f32, f32),
     // TODO: this is a waste of memory
     pub viscosity: f32, // fluid viscosity
     pub eq_density: f32, // equilibrium density for comparing state eqn to pressure
@@ -36,6 +37,7 @@ impl Default for Particle {
             f_hydro: (0.0, 0.0),
             f_drag: (0.0, 0.0),
             f_body: (0.0, 0.0),
+            f_surface: (0.0, 0.0),
             viscosity: 0.0,
             eq_density: 0.0,
             c_sound: 1.0,
@@ -79,6 +81,9 @@ impl Particle {
     }
     pub fn get_v(&self) -> f32 {
         self.velocity.1
+    }
+    pub fn dist(&self, other: &Particle) -> f32 {
+        ( (self.position.0 - other.position.0).powi(2) + (self.position.1 - other.position.1).powi(2) ).powf(0.5)
     }
     pub fn print(&self) {
         println!(
