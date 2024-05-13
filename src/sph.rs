@@ -230,12 +230,16 @@ pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particle
             particles[k].velocity.0 + (dt / particles[k].density) * particles[k].f_hydro.0,
             particles[k].velocity.1 + (dt / particles[k].density) * particles[k].f_hydro.1
         );
-        attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.1);
+        // attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.1);
         // particles[k].position = (
         //     particles[k].position.0 + dt * particles[k].velocity.0,
         //     particles[k].position.1 + dt * particles[k].velocity.1
         // );
-        update_particle_position(fs, pg, &mut particles[k], dt)
+        // update_particle_position(fs, pg, &mut particles[k], dt)
+        particles[k].position = (
+            particles[k].position.0 + dt * particles[k].velocity.0,
+            particles[k].position.1 + dt * particles[k].velocity.1
+        );
     }
 }
 
