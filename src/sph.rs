@@ -92,6 +92,8 @@ pub fn update_pressure_forces(
             let dy = particles[i].get_y() - particles[nbrj].get_y();
             assert!(!dx.is_nan());
             assert!(!dy.is_nan());
+            // println!("{} {} | {} {} {}", particles[i].get_x(), particles[i].get_y(), dx, dy, dx.powi(2) + dy.powi(2));
+            assert!(dx.powi(2) + dy.powi(2) > 0.0);
             let grad = debrun_spiky_kernel_grad(dx, dy, h);
             // println!("\t {} {} {} {} {} {}", i, nbrj, dx, dy, grad.0, grad.1);
             assert!(!grad.0.is_nan());
@@ -157,9 +159,8 @@ pub fn update_surface_forces(
             let r = (dx.powi(2) + dy.powi(2)).powf(0.5);
             if r < h {
                 let s = s_mat[particles[i].particle_type][particles[nbrj].particle_type];
-                f_surface_tot.0 += -s * (c_s * r).cos() * dx / r;
-                f_surface_tot.1 += -s * (c_s * r).cos() * dy / r;
-                // println!("\t{} {} \n \t {} {}", s_mat[0][0], s_mat[0][1], s_mat[1][0], s_mat[1][1]);
+                f_surface_tot.0 += s * (c_s * r).cos() * dx / r;
+                f_surface_tot.1 += s * (c_s * r).cos() * dy / r;
                 // println!("{} {} {} {} {}", 
                 //     s, particles[i].particle_type, particles[nbrj].particle_type, f_surface_tot.0, f_surface_tot.1
                 // )
@@ -215,8 +216,8 @@ pub fn update_viscous_forces_and_velocities(
         // NB: THERE IS A REASON THIS IS NOT IN A SEPARATE FUCNTION
         // FORCE/VEL ARE ITERATED
         particles[i].velocity = (
-            particles[i].velocity.0 + (dt / particles[i].density) * (particles[i].f_body.0 + particles[i].f_drag.0 + particles[i].f_surface.0),
-            particles[i].velocity.1 + (dt / particles[i].density) * (particles[i].f_body.1 + particles[i].f_drag.1 + particles[i].f_surface.1)
+            particles[i].velocity.0 + (dt / particles[i].density) * (particles[i].f_drag.0),
+            particles[i].velocity.1 + (dt / particles[i].density) * (particles[i].f_body.1 + particles[i].f_drag.1)
         );
     }
 }
@@ -234,8 +235,8 @@ pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize,
 pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
     for k in 0..n_real_particles {
         particles[k].velocity = (
-            particles[k].velocity.0 + (dt / particles[k].density) * particles[k].f_hydro.0,
-            particles[k].velocity.1 + (dt / particles[k].density) * particles[k].f_hydro.1
+            particles[k].velocity.0 + (dt / particles[k].density) * (particles[k].f_body.0 + particles[k].f_hydro.0 + particles[k].f_surface.0),
+            particles[k].velocity.1 + (dt / particles[k].density) * (particles[k].f_body.1 + particles[k].f_hydro.1 + particles[k].f_surface.0)
         );
         // attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.1);
         // particles[k].position = (
