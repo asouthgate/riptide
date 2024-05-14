@@ -130,7 +130,7 @@ pub fn update_pressures(particles: &mut Vec<Particle>, rho0_vec: &Vec<f32>, c2_v
 
 pub fn update_body_forces(particles: &mut Vec<Particle>, n_real_particles: usize, body_force: (f32, f32)) {
     for k in 0..n_real_particles {
-        particles[k].f_body = (body_force.0 / particles[k].density, body_force.1 / particles[k].density);
+        particles[k].f_body = (body_force.0 * particles[k].density, body_force.1 * particles[k].density);
     }
 }
 
@@ -302,7 +302,7 @@ pub fn leapfrog_update_acceleration(particles: &mut Vec<Particle>, n_real_partic
     for k in 0..n_real_particles {
         let ftotx = 
               particles[k].f_hydro.0 
-            + particles[k].f_body.0 
+            + particles[k].f_body.0
             + particles[k].f_surface.0
             + particles[k].f_drag.0;
 
