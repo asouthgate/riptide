@@ -170,6 +170,53 @@ pub fn update_surface_forces(
     }
 }
 
+pub fn update_viscous_forces(
+    particles: &mut Vec<Particle>, 
+    n_real_particles: usize, h: f32, mu_mat: &Vec<Vec<f32>>
+) {
+    for i in 0..n_real_particles {
+        let x = particles[i].get_x();
+        let y = particles[i].get_y();
+        particles[i].f_drag = (0.0, 0.0);
+        assert!(!x.is_nan());
+        assert!(!y.is_nan());
+        let mut f_drag_tot = (0.0, 0.0);
+        for _nbrj in particles[i].nbrs.iter() {
+            let nbrj = *_nbrj;
+
+            if nbrj == i {
+                continue;
+            }
+            let dx = particles[i].get_x() - particles[nbrj].get_x();
+            let dy = particles[i].get_y() - particles[nbrj].get_y();
+            let r2 = dx.powi(2) + dy.powi(2);
+            let r = (r2).powf(0.5);
+            // calculate grad
+            // let grad = debrun_spiky_kernel_grad(dx, dy, h);
+            // calculate velocity
+            let du = particles[i].get_u() - particles[nbrj].get_u();
+            let dv = particles[i].get_v() - particles[nbrj].get_v();
+            // take dot product
+            // let dot = du * grad.0 + dv * grad.1;
+            // let lap = debrun_spiky_kernel_lap(r, h);
+            let grad = debrun_spiky_kernel_grad(dx, dy, h);
+
+            // take min (needs to be negative)
+            // multiply by mu
+            let muij = mu_mat[particles[i].particle_type][particles[nbrj].particle_type];
+            let a = 4.0 * particles[nbrj].mass / (particles[nbrj].density * particles[i].density);
+            let b = (grad.0 * du) + (grad.1 * dv);
+            let c = (dx / r2, dy / r2);
+
+            f_drag_tot.0 += muij *  a * b * c.0;
+            f_drag_tot.1 += muij *  a * b * c.1;
+
+        }
+        particles[i].f_drag = f_drag_tot;
+    }
+}
+
+
 pub fn update_viscous_forces_and_velocities(
     particles: &mut Vec<Particle>, 
     n_real_particles: usize, h: f32, mu_mat: &Vec<Vec<f32>>, dt: f32
@@ -249,6 +296,79 @@ pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particle
             particles[k].position.1 + dt * particles[k].velocity.1
         );
     }
+}
+
+pub fn leapfrog_update_acceleration(particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
+    for k in 0..n_real_particles {
+        let ftotx = 
+              particles[k].f_hydro.0 
+            + particles[k].f_body.0 
+            + particles[k].f_surface.0
+            + particles[k].f_drag.0;
+
+        let ftoty = 
+              particles[k].f_hydro.1
+            + particles[k].f_body.1
+            + particles[k].f_surface.1
+            + particles[k].f_drag.1;
+
+        particles[k].acceleration = (
+            (1.0 / particles[k].density) * ftotx,
+            (1.0 / particles[k].density) * ftoty
+        );
+    }
+}
+
+pub fn leapfrog_cal_forces(
+    pg: &PixelGrid, fs: &FluidState, index: &mut ParticleIndex,
+    particles: &mut Vec<Particle>, n_real_particles: usize,
+    particle_constants: &ParticleConstants, dt: f32,
+    h: f32, body_force: (f32, f32)
+) {
+    let max_dist = h * 1.0;
+    index.update(pg, particles);
+    let mut avg_nbrs = 0.0;
+    for i in 0..particles.len() {
+        particles[i].nbrs = index.get_nbrs(&pg, particles[i].get_x(), particles[i].get_y(), max_dist);
+        cull_nbrs(i, particles, h);
+        avg_nbrs += particles[i].nbrs.len() as f32;
+    }
+    avg_nbrs /= particles.len() as f32;
+
+    // update forces
+    update_densities(particles, h);
+    update_body_forces(particles, n_real_particles, body_force);
+    update_surface_forces(particles, n_real_particles, h, &particle_constants.s_mat);
+    update_viscous_forces(particles, n_real_particles, h, &particle_constants.mu_mat);
+    update_pressures(particles, &particle_constants.rho0_vec, &particle_constants.c2_vec);
+    update_pressure_forces(particles, h, n_real_particles);
+}
+
+pub fn leapfrog(
+    pg: &PixelGrid, fs: &FluidState, index: &mut ParticleIndex,
+    particles: &mut Vec<Particle>, n_real_particles: usize,
+    particle_constants: &ParticleConstants, dt: f32,
+    h: f32, body_force: (f32, f32)
+) {
+
+    for k in 0..n_real_particles {
+        particles[k].velocity = (
+            particles[k].velocity.0 + particles[k].acceleration.0 * dt / 2.0,
+            particles[k].velocity.1 + particles[k].acceleration.1 * dt / 2.0
+        );
+        particles[k].position = (
+            particles[k].position.0 + dt * particles[k].velocity.0,
+            particles[k].position.1 + dt * particles[k].velocity.1
+        );
+    }  
+    leapfrog_cal_forces(pg, fs, index, particles, n_real_particles, particle_constants, dt, h, body_force);
+    leapfrog_update_acceleration(particles, n_real_particles, dt);
+    for k in 0..n_real_particles {
+        particles[k].velocity = (
+            particles[k].velocity.0 + particles[k].acceleration.0 * dt / 2.0,
+            particles[k].velocity.1 + particles[k].acceleration.1 * dt / 2.0
+        );
+    }  
 }
 
 pub fn integrate(
