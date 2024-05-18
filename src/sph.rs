@@ -1,9 +1,7 @@
-use crate::particle::{Particle, update_particle_position, attenuate_particle_velocity_at_boundary};
-use crate::fluid_state::FluidState;
+use crate::particle::{Particle};
 use crate::pixelgrid::PixelGrid;
 use crate::particle_index::*;
 use crate::kernels::*;
-use std::time::{Instant};
 
 const PI: f32 = 3.141592653589793;
 
@@ -17,7 +15,7 @@ pub struct ParticleConstants {
     pub s_mat: Vec<Vec<f32>>, // viscosity; one for each PAIRWISE COMBINATION of Particle types
 }
 
-fn debug_print(p: &Particle) {
+fn _debug_print(p: &Particle) {
     println!("body: {:?} drag: {:?} hydro: {:?} surface: {:?}", 
         p.f_body, p.f_drag, p.f_hydro, p.f_surface
     );
@@ -196,7 +194,6 @@ pub fn update_viscous_forces(
             let dx = particles[i].get_x() - particles[nbrj].get_x();
             let dy = particles[i].get_y() - particles[nbrj].get_y();
             let r2 = dx.powi(2) + dy.powi(2);
-            let r = (r2).powf(0.5);
             // calculate grad
             // let grad = debrun_spiky_kernel_grad(dx, dy, h);
             // calculate velocity
@@ -243,7 +240,6 @@ pub fn update_viscous_forces_and_velocities(
             let dx = particles[i].get_x() - particles[nbrj].get_x();
             let dy = particles[i].get_y() - particles[nbrj].get_y();
             let r2 = dx.powi(2) + dy.powi(2);
-            let r = (r2).powf(0.5);
             // calculate grad
             // let grad = debrun_spiky_kernel_grad(dx, dy, h);
             // calculate velocity
@@ -285,26 +281,7 @@ pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize,
 }
 
 
-pub fn update_velocities_and_positions(pg: &PixelGrid, fs: &FluidState, particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
-    for k in 0..n_real_particles {
-        particles[k].velocity = (
-            particles[k].velocity.0 + (dt / particles[k].density) * (particles[k].f_hydro.0),
-            particles[k].velocity.1 + (dt / particles[k].density) * (particles[k].f_hydro.1)
-        );
-        // attenuate_particle_velocity_at_boundary(pg, fs, &mut particles[k], 0.1);
-        // particles[k].position = (
-        //     particles[k].position.0 + dt * particles[k].velocity.0,
-        //     particles[k].position.1 + dt * particles[k].velocity.1
-        // );
-        // update_particle_position(fs, pg, &mut particles[k], dt)
-        particles[k].position = (
-            particles[k].position.0 + dt * particles[k].velocity.0,
-            particles[k].position.1 + dt * particles[k].velocity.1
-        );
-    }
-}
-
-pub fn leapfrog_update_acceleration(particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
+pub fn leapfrog_update_acceleration(particles: &mut Vec<Particle>, n_real_particles: usize) {
     for k in 0..n_real_particles {
         let ftotx = 
               particles[k].f_hydro.0 
@@ -326,20 +303,17 @@ pub fn leapfrog_update_acceleration(particles: &mut Vec<Particle>, n_real_partic
 }
 
 pub fn leapfrog_cal_forces(
-    pg: &PixelGrid, fs: &FluidState, index: &mut ParticleIndex,
+    pg: &PixelGrid, index: &mut ParticleIndex,
     particles: &mut Vec<Particle>, n_real_particles: usize,
-    particle_constants: &ParticleConstants, dt: f32,
+    particle_constants: &ParticleConstants,
     h: f32, body_force: (f32, f32)
 ) {
     let max_dist = h * 1.0;
     index.update(pg, particles);
-    let mut avg_nbrs = 0.0;
     for i in 0..particles.len() {
         particles[i].nbrs = index.get_nbrs(&pg, particles[i].get_x(), particles[i].get_y(), max_dist);
         cull_nbrs(i, particles, h);
-        avg_nbrs += particles[i].nbrs.len() as f32;
     }
-    avg_nbrs /= particles.len() as f32;
 
     // update forces
     update_densities(particles, h);
@@ -351,7 +325,7 @@ pub fn leapfrog_cal_forces(
 }
 
 pub fn leapfrog(
-    pg: &PixelGrid, fs: &FluidState, index: &mut ParticleIndex,
+    pg: &PixelGrid, index: &mut ParticleIndex,
     particles: &mut Vec<Particle>, n_real_particles: usize,
     particle_constants: &ParticleConstants, dt: f32,
     h: f32, body_force: (f32, f32)
@@ -367,64 +341,14 @@ pub fn leapfrog(
             particles[k].position.1 + dt * particles[k].velocity.1
         );
     }  
-    leapfrog_cal_forces(pg, fs, index, particles, n_real_particles, particle_constants, dt, h, body_force);
-    leapfrog_update_acceleration(particles, n_real_particles, dt);
+    leapfrog_cal_forces(pg, index, particles, n_real_particles, particle_constants, h, body_force);
+    leapfrog_update_acceleration(particles, n_real_particles);
     for k in 0..n_real_particles {
         particles[k].velocity = (
             particles[k].velocity.0 + particles[k].acceleration.0 * dt / 2.0,
             particles[k].velocity.1 + particles[k].acceleration.1 * dt / 2.0
         );
     }  
-}
-
-pub fn integrate(
-    pg: &PixelGrid, fs: &FluidState, index: &mut ParticleIndex,
-    particles: &mut Vec<Particle>, n_real_particles: usize,
-    particle_constants: &ParticleConstants, dt: f32,
-    h: f32, body_force: (f32, f32)
-) {
-    let t0 = Instant::now();
-    let max_dist = h * 1.0;
-    index.update(pg, particles);
-    let mut avg_nbrs = 0.0;
-    for i in 0..particles.len() {
-        particles[i].nbrs = index.get_nbrs(&pg, particles[i].get_x(), particles[i].get_y(), max_dist);
-        cull_nbrs(i, particles, h);
-        // for nbrj in &particles[i].nbrs {
-        //     println!("{} {}", h, particles[*nbrj].dist(&particles[i]));
-        // }
-        avg_nbrs += particles[i].nbrs.len() as f32;
-    }
-    avg_nbrs /= particles.len() as f32;
-    println!("Average nbr size: {}", avg_nbrs);
-    let tindex = Instant::now();
-    update_densities(particles, h);
-    let tdensity = Instant::now();
-    // compute viscous and body forces & update velocity (one particle at a time)
-    // when i say one at a time, update velocity i, which effects calc of velocity i + 1 
-    // it's data dependent, not parallelizable updates
-    update_body_forces(particles, n_real_particles, body_force);
-    // update_velocities(particles, n_real_particles, dt);
-    update_surface_forces(
-        particles, n_real_particles, h, &particle_constants.s_mat,
-    );
-    update_viscous_forces_and_velocities(
-        particles, n_real_particles, h, &particle_constants.mu_mat, dt
-    );
-    update_pressures(particles, &particle_constants.rho0_vec, &particle_constants.c2_vec);
-    let tpressure = Instant::now();
-    update_pressure_forces(particles, h, n_real_particles);
-    let tpressureforce = Instant::now();
-    update_velocities_and_positions(pg, fs, particles, n_real_particles, dt);    
-    let tpos = Instant::now();
-    println!(
-        "{:?} {:?} {:?} {:?} {:?}",
-        tindex.duration_since(t0),
-        tdensity.duration_since(tindex),
-        tpressure.duration_since(tdensity),
-        tpressureforce.duration_since(tpressure),
-        tpos.duration_since(tpressureforce),
-    );
 }
 
 
@@ -454,13 +378,10 @@ mod tests {
     #[test]
     fn test_2_particles() {
         let h: f32 = 2.0;
-        let rho0_vec = vec![1.0];
-        let c2_vec = vec![1.0];
         let dt = 0.1;
         let p1 = Particle { position: (10.0, 10.0), mass: 1.0, ..Default::default() };
         let p2 = Particle { position: (10.5, 10.0), mass: 1.0, ..Default::default() };
         let pg = PixelGrid::new(1000, 1000);
-        let fs = FluidState::new(&pg);
         let mut index = ParticleIndex::new(&pg); 
         let mut particles = vec![p1, p2];
         index.update(&pg, &particles);
@@ -480,26 +401,26 @@ mod tests {
         };
 
         leapfrog_cal_forces(
-            &pg, &fs, &mut index,
+            &pg, &mut index,
             &mut particles, 2,
-            &pc, dt, h, (0.0, -0.9)
+            &pc, h, (0.0, -0.9)
         );
-        leapfrog_update_acceleration(&mut particles, 2, dt);
+        leapfrog_update_acceleration(&mut particles, 2);
 
         for _ in 0..20 {
             for p in &particles {
-                debug_print(p);
+                _debug_print(p);
             }
 
             leapfrog(
-                &pg, &fs, &mut index,
+                &pg, &mut index,
                 &mut particles, 2,
                 &pc, dt, h, (0.0, -0.9)
             );  
             
             let mut new_err = 0.0;
             for p in &particles {
-                let rho0 = rho0_vec[p.particle_type];
+                let rho0 = pc.rho0_vec[p.particle_type];
                 new_err += (p.density - rho0).abs()
             }    
             assert!(new_err <= prev_err);

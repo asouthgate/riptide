@@ -28,29 +28,8 @@ pub fn initialize_square_boundary(fs: &mut FluidState, pg: &PixelGrid) {
     }
 }
 
-
-// pub fn get_ghost_particles_naive(fs: &FluidState, pg: &PixelGrid) -> Vec<Particle> {
-//     let mut res = vec![];
-//     for i in 0..pg.m {
-//         for j in 0..pg.n {
-//             let ak = i * pg.n + j;
-//             if fs.boundary[ak] == 0.0 {
-//                 res.push(Particle{
-//                     position: (j as f32 + pg.dx / 2.0, i as f32 + pg.dy / 2.0),
-//                     mass: 1.0,
-//                     density: 1.0,
-//                     pressure: 0.0,
-//                     .. Default::default()
-//                 })
-//             }
-//         }
-//     }
-//     res
-// }
-
-pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i32, n: i32) -> Vec<Particle> {
+pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i32) -> Vec<Particle> {
     let mut res = vec![];
-    let mass = 1.5;
     for i in i0..ie {
         let (x, y) = pg.worldxy2xy(j0 as f32, i as f32);
         let ak = pg.xy2ak(x, y);

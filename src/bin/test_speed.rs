@@ -1,9 +1,5 @@
 use riptide::pixelgrid::PixelGrid;
 use riptide::fluid_state::FluidState;
-use riptide::particle::*;
-use riptide::particle_index::*;
-use riptide::sph::*;
-use riptide::boundary::*;
 use riptide::pressure::{JacobiPressureSolver, PressureSolver};
 use std::time::{Duration, Instant};
 
