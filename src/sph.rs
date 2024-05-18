@@ -11,6 +11,7 @@ const PI: f32 = 3.141592653589793;
 ///
 /// In general, these constants may either be:
 ///     - A single scalar for all fluid
+///     - A tuple of f32
 ///     - A vector, one scalar for each particle type
 ///     - A matrix, one scalar for each pairwise combination of types
 ///
@@ -21,6 +22,7 @@ pub struct ParticleConstants {
     pub c2_vec: Vec<f32>, // speed of sound squared
     pub mu_mat: Vec<Vec<f32>>, // viscosity
     pub s_mat: Vec<Vec<f32>>, // surface tension
+    pub body_force: (f32, f32), // e.g. gravity
 }
 
 
@@ -270,7 +272,7 @@ pub fn leapfrog_cal_forces(
     pg: &PixelGrid, index: &mut ParticleIndex,
     particles: &mut Vec<Particle>, n_real_particles: usize,
     particle_constants: &ParticleConstants,
-    h: f32, body_force: (f32, f32)
+    h: f32
 ) {
     let max_dist = h * 1.0;
     index.update(pg, particles);
@@ -281,7 +283,7 @@ pub fn leapfrog_cal_forces(
 
     // update forces
     update_densities(particles, h);
-    update_body_forces(particles, n_real_particles, body_force);
+    update_body_forces(particles, n_real_particles, particle_constants.body_force);
     update_surface_forces(particles, n_real_particles, h, &particle_constants.s_mat);
     update_viscous_forces(particles, n_real_particles, h, &particle_constants.mu_mat);
     update_pressures(particles, &particle_constants.rho0_vec, &particle_constants.c2_vec);
@@ -293,7 +295,7 @@ pub fn leapfrog(
     pg: &PixelGrid, index: &mut ParticleIndex,
     particles: &mut Vec<Particle>, n_real_particles: usize,
     particle_constants: &ParticleConstants, dt: f32,
-    h: f32, body_force: (f32, f32)
+    h: f32
 ) {
 
     for k in 0..n_real_particles {
@@ -306,7 +308,9 @@ pub fn leapfrog(
             particles[k].position.1 + dt * particles[k].velocity.1
         );
     }  
-    leapfrog_cal_forces(pg, index, particles, n_real_particles, particle_constants, h, body_force);
+    leapfrog_cal_forces(
+        pg, index, particles, n_real_particles, particle_constants, h
+    );
     leapfrog_update_acceleration(particles, n_real_particles);
     for k in 0..n_real_particles {
         particles[k].velocity = (
@@ -363,12 +367,13 @@ mod tests {
                 vec![1.0, 0.0], 
                 vec![0.0, 20.0]
             ],
+            body_force: (0.0, -0.9)
         };
 
         leapfrog_cal_forces(
             &pg, &mut index,
             &mut particles, 2,
-            &pc, h, (0.0, -0.9)
+            &pc, h
         );
         leapfrog_update_acceleration(&mut particles, 2);
 
@@ -380,7 +385,7 @@ mod tests {
             leapfrog(
                 &pg, &mut index,
                 &mut particles, 2,
-                &pc, dt, h, (0.0, -0.9)
+                &pc, dt, h
             );  
             
             let mut new_err = 0.0;
