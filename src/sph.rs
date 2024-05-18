@@ -3,17 +3,26 @@ use crate::pixelgrid::PixelGrid;
 use crate::particle_index::*;
 use crate::kernels::*;
 
+
 const PI: f32 = 3.141592653589793;
 
+
+/// Representation of macroscopic fluid constants for particles.
+///
+/// In general, these constants may either be:
+///     - A single scalar for all fluid
+///     - A vector, one scalar for each particle type
+///     - A matrix, one scalar for each pairwise combination of types
+///
+/// These structures are intentionally simple. We want easy conversion to GPU.
+/// They could be even simpler, and represented as arrays.
 pub struct ParticleConstants {
-    /// These structures are intentionally simple
-    /// We do not want high abstraction level
-    /// We need to be able to port to GPU code easily
-    pub rho0_vec: Vec<f32>, // Vector; one for each type of Particle
-    pub c2_vec: Vec<f32>, // speed of sound squared: one for each type of Particle
-    pub mu_mat: Vec<Vec<f32>>, // viscosity; one for each PAIRWISE COMBINATION of Particle types
-    pub s_mat: Vec<Vec<f32>>, // viscosity; one for each PAIRWISE COMBINATION of Particle types
+    pub rho0_vec: Vec<f32>, // target density; hydrostatic force is zero at rho0
+    pub c2_vec: Vec<f32>, // speed of sound squared
+    pub mu_mat: Vec<Vec<f32>>, // viscosity
+    pub s_mat: Vec<Vec<f32>>, // surface tension
 }
+
 
 fn _debug_print(p: &Particle) {
     println!("body: {:?} drag: {:?} hydro: {:?} surface: {:?}", 
@@ -21,61 +30,78 @@ fn _debug_print(p: &Particle) {
     );
 }
 
-fn cal_pressure(rho: f32, rho0: f32, c: f32) -> f32 {
-    c * (rho - rho0)
+
+/// Calculate the hydrostatic pressure force for a given density.
+///
+/// This model is essentially a spring
+///
+/// # Arguments
+///
+/// * `rho` - Density
+/// * `rho0` - Density at rest
+/// * `k` - Either speed of sound squared, or something else
+fn cal_pressure(rho: f32, rho0: f32, k: f32) -> f32 {
+    k * (rho - rho0)
 }
 
-fn cal_rho_ij(mj: f32, rij: f32, h: f32) -> f32 {
-    mj * debrun_spiky_kernel(rij, h)
+
+/// Calculate the jth density contribution for particle i.
+fn cal_rho_ij(mass_j: f32, dist_ij: f32, h: f32) -> f32 {
+    mass_j * debrun_spiky_kernel(dist_ij, h)
 }
 
-fn cal_pressure_force_coefficient(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32) -> f32 {
+
+fn _cal_pressure_force_coefficient(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32) -> f32 {
     ( (pi/rhoi.powi(2)) + (pj/rhoj.powi(2)) ) * mj
 }
 
-// NOTE WELL, THERE IS A FORMAL, REDUNDANT MULTIPLICATION BY Pi
-// In optimization, this could be removed.
-// It is needed for a = f / rho to make plain sense. 
-// ommitting this pi factor, this would be the acceleration, not the force
-fn cal_pressure_force_ij(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32, grad: (f32, f32)) -> (f32, f32) {
-    let pforce_coefficient = - pi * cal_pressure_force_coefficient(pi, pj, rhoi, rhoj, mj);
-    (pforce_coefficient * grad.0, pforce_coefficient * grad.1)
+
+/// Calculate the jth pressure force contribution for particle i.
+//
+/// * `pi` - pressure i
+/// * `pj` - pressure j
+/// * `rhoi` - density i
+/// * `rhoj` - density j
+/// * `mj` - mass j
+/// * `gradW` - gradient of the kernel function W(r, h)
+fn cal_pressure_force_ij(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32, gradw: (f32, f32)) -> (f32, f32) {
+    let pforce_coefficient = - pi * _cal_pressure_force_coefficient(pi, pj, rhoi, rhoj, mj);
+    (pforce_coefficient * gradw.0, pforce_coefficient * gradw.1)
 }
 
-// fn cal_pressure_acceleration_ij(pi: f32, force: (f32, f32)) -> (f32, f32) {
-//     (force.0 / pi, force.1 / pi)
-// }
 
+// Update particle densities.
+//
+// This function takes a vector of particles, and for a given particle
+// recomputes the density based on neighboring particles.
+//
+/// * `particles` - vector of particles
+/// * `h` - characteristic length
 pub fn update_densities(
     particles: &mut Vec<Particle>, h: f32
 ) {
     for i in 0..particles.len() {
-        let x = particles[i].get_x();
-        let y = particles[i].get_y();
-        assert!(!x.is_nan());
-        assert!(!y.is_nan());
-        // let mut nbrs = index.get_nbrs(&pg, x, y, max_dist);
-        // nbrs.push(i);
+        assert!(!particles[i].get_x().is_nan());
+        assert!(!particles[i].get_y().is_nan());
         particles[i].density = 0.0;
         let mut density_sum = 0.0;
-        // println!("{}", nbrs.len());
         for nbrj in particles[i].nbrs.iter() {
-            let dx = x - particles[*nbrj].get_x();
-            let dy = y - particles[*nbrj].get_y();
-            let rij = (dx.powi(2) + dy.powi(2)).powf(0.5);
+            let rij = particles[i].dist(&particles[*nbrj]);
             let contrib = cal_rho_ij(particles[*nbrj].mass, rij, h);
             density_sum += contrib; 
             assert!(!density_sum.is_nan());
         }
         particles[i].density = density_sum;
-        // correct the density for isolated particles, otherwise it can be too high
-        // let wmax = cal_rho_ij(particles[i].mass, 0.0, h);
-        // let rhocorr = (particles[i].density + (n_nbrs as f32 - 1.0) * wmax) / wmax;
-        // println!("rho {}, wmax {}, nnbrs {}, corrected_density: {}", particles[i].density, wmax, n_nbrs, rhocorr);
-        // particles[i].density = rhocorr;
     }
 }
 
+
+// Update particle pressure forces.
+//
+/// * `particles` - vector of particles
+/// * `h` - characteristic length
+/// * `n_real_particles` - gives index of last particle to compute for
+///         e.g. to ignore static particles
 pub fn update_pressure_forces(
     particles: &mut Vec<Particle>, h: f32, n_real_particles: usize
 ) {
@@ -88,7 +114,6 @@ pub fn update_pressure_forces(
         let mut ftot = (0.0, 0.0);
         for _nbrj in particles[i].nbrs.iter() {
             let nbrj = *_nbrj;
-
             if nbrj == i {
                 continue;
             }
@@ -96,10 +121,8 @@ pub fn update_pressure_forces(
             let dy = particles[i].get_y() - particles[nbrj].get_y();
             assert!(!dx.is_nan());
             assert!(!dy.is_nan());
-            // println!("{} {} | {} {} {}", particles[i].get_x(), particles[i].get_y(), dx, dy, dx.powi(2) + dy.powi(2));
             assert!(dx.powi(2) + dy.powi(2) > 0.0);
             let grad = debrun_spiky_kernel_grad(dx, dy, h);
-            // println!("\t {} {} {} {} {} {}", i, nbrj, dx, dy, grad.0, grad.1);
             assert!(!grad.0.is_nan());
             assert!(!grad.1.is_nan());
             assert!(particles[i].density != 0.0);
@@ -112,18 +135,17 @@ pub fn update_pressure_forces(
                 particles[nbrj].mass,
                 grad
             );
-            assert!(!fij.0.is_nan());
-            assert!(!fij.1.is_nan());
-
             ftot.0 += fij.0;
             ftot.1 += fij.1;
-
-            assert!(!particles[i].f_hydro.0.is_nan());
-            assert!(!particles[i].f_hydro.1.is_nan());
+            assert!(!fij.0.is_nan());
+            assert!(!fij.1.is_nan());
         }
         particles[i].f_hydro = ftot;
+        assert!(!particles[i].f_hydro.0.is_nan());
+        assert!(!particles[i].f_hydro.1.is_nan());
     }
 }
+
 
 pub fn update_pressures(particles: &mut Vec<Particle>, rho0_vec: &Vec<f32>, c2_vec: &Vec<f32>) {
     for k in 0..particles.len() {
@@ -132,12 +154,21 @@ pub fn update_pressures(particles: &mut Vec<Particle>, rho0_vec: &Vec<f32>, c2_v
     }
 }
 
+
 pub fn update_body_forces(particles: &mut Vec<Particle>, n_real_particles: usize, body_force: (f32, f32)) {
     for k in 0..n_real_particles {
         particles[k].f_body = (body_force.0 * particles[k].density, body_force.1 * particles[k].density);
     }
 }
 
+
+// Update particle surface tension forces.
+//
+/// * `particles` - vector of particles
+/// * `h` - characteristic length
+/// * `n_real_particles` - gives index of last particle to compute for
+///         e.g. to ignore static particles
+/// * `s_mat` - pairwise surface tension constants
 pub fn update_surface_forces(
     particles: &mut Vec<Particle>, 
     n_real_particles: usize, 
@@ -154,7 +185,6 @@ pub fn update_surface_forces(
         let mut f_surface_tot = (0.0, 0.0);
         for _nbrj in particles[i].nbrs.iter() {
             let nbrj = *_nbrj;
-
             if nbrj == i {
                 continue;
             }
@@ -165,15 +195,20 @@ pub fn update_surface_forces(
                 let s = s_mat[particles[i].particle_type][particles[nbrj].particle_type];
                 f_surface_tot.0 += s * (c_s * r).cos() * dx / r;
                 f_surface_tot.1 += s * (c_s * r).cos() * dy / r;
-                // println!("{} {} {} {} {}", 
-                //     s, particles[i].particle_type, particles[nbrj].particle_type, f_surface_tot.0, f_surface_tot.1
-                // )
             }
         }
         particles[i].f_surface = f_surface_tot;
     }
 }
 
+
+// Update particle viscous drag forces.
+//
+/// * `particles` - vector of particles
+/// * `h` - characteristic length
+/// * `n_real_particles` - gives index of last particle to compute for
+///         e.g. to ignore static particles
+/// * `mu_mat` - pairwise surface tension constants
 pub fn update_viscous_forces(
     particles: &mut Vec<Particle>, 
     n_real_particles: usize, h: f32, mu_mat: &Vec<Vec<f32>>
@@ -187,96 +222,24 @@ pub fn update_viscous_forces(
         let mut f_drag_tot = (0.0, 0.0);
         for _nbrj in particles[i].nbrs.iter() {
             let nbrj = *_nbrj;
-
             if nbrj == i {
                 continue;
             }
             let dx = particles[i].get_x() - particles[nbrj].get_x();
             let dy = particles[i].get_y() - particles[nbrj].get_y();
             let r2 = dx.powi(2) + dy.powi(2);
-            // calculate grad
-            // let grad = debrun_spiky_kernel_grad(dx, dy, h);
-            // calculate velocity
             let du = particles[i].get_u() - particles[nbrj].get_u();
             let dv = particles[i].get_v() - particles[nbrj].get_v();
-            // take dot product
-            // let dot = du * grad.0 + dv * grad.1;
-            // let lap = debrun_spiky_kernel_lap(r, h);
             let grad = debrun_spiky_kernel_grad(dx, dy, h);
-
-            // take min (needs to be negative)
-            // multiply by mu
             let muij = mu_mat[particles[i].particle_type][particles[nbrj].particle_type];
             let a = 4.0 * particles[nbrj].mass / (particles[nbrj].density * particles[i].density);
             let b = (grad.0 * du) + (grad.1 * dv);
             let c = (dx / r2, dy / r2);
-
-            f_drag_tot.0 += muij *  a * b * c.0;
-            f_drag_tot.1 += muij *  a * b * c.1;
-
-        }
-        particles[i].f_drag = f_drag_tot;
-    }
-}
-
-
-pub fn update_viscous_forces_and_velocities(
-    particles: &mut Vec<Particle>, 
-    n_real_particles: usize, h: f32, mu_mat: &Vec<Vec<f32>>, dt: f32
-) {
-    for i in 0..n_real_particles {
-        let x = particles[i].get_x();
-        let y = particles[i].get_y();
-        particles[i].f_drag = (0.0, 0.0);
-        assert!(!x.is_nan());
-        assert!(!y.is_nan());
-        let mut f_drag_tot = (0.0, 0.0);
-        for _nbrj in particles[i].nbrs.iter() {
-            let nbrj = *_nbrj;
-
-            if nbrj == i {
-                continue;
-            }
-            let dx = particles[i].get_x() - particles[nbrj].get_x();
-            let dy = particles[i].get_y() - particles[nbrj].get_y();
-            let r2 = dx.powi(2) + dy.powi(2);
-            // calculate grad
-            // let grad = debrun_spiky_kernel_grad(dx, dy, h);
-            // calculate velocity
-            let du = particles[i].get_u() - particles[nbrj].get_u();
-            let dv = particles[i].get_v() - particles[nbrj].get_v();
-            // take dot product
-            // let dot = du * grad.0 + dv * grad.1;
-            // let lap = debrun_spiky_kernel_lap(r, h);
-            let grad = debrun_spiky_kernel_grad(dx, dy, h);
-
-            // take min (needs to be negative)
-            // multiply by mu
-            let muij = mu_mat[particles[i].particle_type][particles[nbrj].particle_type];
-            let a = 4.0 * particles[nbrj].mass / (particles[nbrj].density * particles[i].density);
-            let b = (grad.0 * du) + (grad.1 * dv);
-            let c = (dx / r2, dy / r2);
-
-            f_drag_tot.0 += muij *  a * b * c.0;
-            f_drag_tot.1 += muij *  a * b * c.1;
+            f_drag_tot.0 += muij * a * b * c.0;
+            f_drag_tot.1 += muij * a * b * c.1;
 
         }
         particles[i].f_drag = f_drag_tot;
-        // NB: THERE IS A REASON THIS IS NOT IN A SEPARATE FUCNTION
-        // FORCE/VEL ARE ITERATED
-        particles[i].velocity = (
-            particles[i].velocity.0 + (dt / particles[i].density) * (particles[i].f_body.0 + particles[i].f_drag.0 + particles[i].f_surface.0),
-            particles[i].velocity.1 + (dt / particles[i].density) * (particles[i].f_body.1 + particles[i].f_drag.1 + particles[i].f_surface.1)
-        );
-    }
-}
-
-pub fn update_velocities(particles: &mut Vec<Particle>, n_real_particles: usize, dt: f32) {
-    for k in 0..n_real_particles {
-        particles[k].velocity = (
-            particles[k].velocity.0 + (dt / particles[k].density) * particles[k].f_body.0,
-            particles[k].velocity.1 + (dt / particles[k].density) * particles[k].f_body.1
-        );
     }
 }
 
@@ -302,6 +265,7 @@ pub fn leapfrog_update_acceleration(particles: &mut Vec<Particle>, n_real_partic
     }
 }
 
+
 pub fn leapfrog_cal_forces(
     pg: &PixelGrid, index: &mut ParticleIndex,
     particles: &mut Vec<Particle>, n_real_particles: usize,
@@ -323,6 +287,7 @@ pub fn leapfrog_cal_forces(
     update_pressures(particles, &particle_constants.rho0_vec, &particle_constants.c2_vec);
     update_pressure_forces(particles, h, n_real_particles);
 }
+
 
 pub fn leapfrog(
     pg: &PixelGrid, index: &mut ParticleIndex,
@@ -371,8 +336,8 @@ mod tests {
         let m = 1.0;
         assert!(pi == 2.0);
         assert!(pj == 4.0);
-        println!("{} {}", cal_pressure_force_coefficient(pi, pj, rhoi, rhoj, m), (2 + 1));
-        assert!(cal_pressure_force_coefficient(pi, pj, rhoi, rhoj, m) == (2.0 + 1.0));
+        println!("{} {}", _cal_pressure_force_coefficient(pi, pj, rhoi, rhoj, m), (2 + 1));
+        assert!(_cal_pressure_force_coefficient(pi, pj, rhoi, rhoj, m) == (2.0 + 1.0));
     }
 
     #[test]
