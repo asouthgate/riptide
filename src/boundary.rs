@@ -50,6 +50,7 @@ pub fn initialize_square_boundary(fs: &mut FluidState, pg: &PixelGrid) {
 
 pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i32, n: i32) -> Vec<Particle> {
     let mut res = vec![];
+    let mass = 1.5;
     for i in i0..ie {
         let (x, y) = pg.worldxy2xy(j0 as f32, i as f32);
         let ak = pg.xy2ak(x, y);
@@ -59,16 +60,12 @@ pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie
         fs.boundary[ak] = 0.0;
         res.push(Particle{
             position: (j0 as f32 - pg.dx / 10.0, i as f32),
-            mass: 1.0,
-            density: 1.0,
-            pressure: 1.0,
+            mass: mass,
             .. Default::default()
         });
         res.push(Particle{
             position: (je as f32 + pg.dx / 10.0, i as f32),
-            mass: 1.0,
-            density: 1.0,
-            pressure: 1.0,
+            mass: mass,
             .. Default::default()
         });
     }
@@ -81,14 +78,17 @@ pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie
         fs.boundary[ak] = 0.0;
         res.push(Particle{
             position: (j as f32, i0 as f32 - pg.dy / 10.0),
-            mass: 1.0,
-            density: 1.0,
-            pressure: 1.0,
+            mass: mass,
+            .. Default::default()
+        });
+        res.push(Particle{
+            position: (j as f32, i0 as f32 + 1.0),
+            mass: mass,
             .. Default::default()
         });
         res.push(Particle{
             position: (j as f32, ie as f32 + pg.dy / 10.0),
-            mass: 1.0,
+            mass: mass,
             .. Default::default()
         });
     }
