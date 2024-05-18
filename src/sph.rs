@@ -17,6 +17,12 @@ pub struct ParticleConstants {
     pub s_mat: Vec<Vec<f32>>, // viscosity; one for each PAIRWISE COMBINATION of Particle types
 }
 
+fn debug_print(p: &Particle) {
+    println!("body: {:?} drag: {:?} hydro: {:?} surface: {:?}", 
+        p.f_body, p.f_drag, p.f_hydro, p.f_surface
+    );
+}
+
 fn cal_pressure(rho: f32, rho0: f32, c: f32) -> f32 {
     c * (rho - rho0)
 }
@@ -446,28 +452,10 @@ mod tests {
     }
 
     #[test]
-    fn test_cal_pressure_force_ij() {
-        // let h: f32 = 1.329;
-        // let dx: f32 = 0.1361;
-        // let dy: f32 = 0.9981;
-        // let r: f32 = cal_r(dx, dy);
-        // let h = 1.8;
-        // let grad = debrun_spiky_kernel_grad(dx, dy, h);
-        // let rhoi = 1.0;
-        // let rhoj = 2.0;
-        // let pi = cal_pressure(rhoi, 0.0, 1.0);
-        // let pj = cal_pressure(rhoj, 0.0, 1.0);
-        // assert!(pj > pi);
-        // let mj = 1.0;
-        // let pf = cal_pressure_force_ij(pi, pj, rhoi, rhoj, mj, grad);
-    }
-
-    #[test]
     fn test_2_particles() {
         let h: f32 = 2.0;
         let rho0_vec = vec![1.0];
         let c2_vec = vec![1.0];
-        // let max_dist = 100.0;
         let dt = 0.1;
         let p1 = Particle { position: (10.0, 10.0), mass: 1.0, ..Default::default() };
         let p2 = Particle { position: (10.5, 10.0), mass: 1.0, ..Default::default() };
@@ -477,18 +465,38 @@ mod tests {
         let mut particles = vec![p1, p2];
         index.update(&pg, &particles);
         let mut prev_err = 99999.0;
-        for _ in 0..10 {
-            update_densities(&mut particles, h);
-            assert!(particles[1].density == particles[0].density);
-            update_pressures(&mut particles, &rho0_vec, &c2_vec);
-            println!("");
-            assert!(particles[0].pressure == particles[1].pressure);
-            update_pressure_forces(&mut particles, h, 2);
-            println!("");
+
+        let pc = ParticleConstants {
+            rho0_vec: vec![1.0, 0.7],
+            c2_vec: vec![3.4, 3.8],
+            mu_mat: vec![
+                vec![2.5, 0.01], 
+                vec![0.01, 3.0]
+            ],
+            s_mat: vec![
+                vec![1.0, 0.0], 
+                vec![0.0, 20.0]
+            ],
+        };
+
+        leapfrog_cal_forces(
+            &pg, &fs, &mut index,
+            &mut particles, 2,
+            &pc, dt, h, (0.0, -0.9)
+        );
+        leapfrog_update_acceleration(&mut particles, 2, dt);
+
+        for _ in 0..20 {
             for p in &particles {
-                println!    ("mass: {} density {} pressure {}, f ({} {})", p.mass, p.density, p.pressure, p.f_hydro.0, p.f_hydro.1);
+                debug_print(p);
             }
-            update_velocities_and_positions(&pg, &fs, &mut particles, 2, dt);
+
+            leapfrog(
+                &pg, &fs, &mut index,
+                &mut particles, 2,
+                &pc, dt, h, (0.0, -0.9)
+            );  
+            
             let mut new_err = 0.0;
             for p in &particles {
                 let rho0 = rho0_vec[p.particle_type];
