@@ -4,6 +4,7 @@ pub mod fluid_state;
 pub mod kernels;
 pub mod momentum;
 pub mod particle;
+pub mod particle_ecs;
 pub mod particle_index;
 pub mod rigid_body;
 pub mod pixelgrid;
