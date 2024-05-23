@@ -715,7 +715,7 @@ mod tests {
         let p1 = Particle { position: (10.0, 10.0), mass: 1.0, ..Default::default() };
         let p2 = Particle { position: (10.5, 10.0), mass: 1.0, ..Default::default() };
         let pg = PixelGrid::new(1000, 1000);
-        let mut index = ParticleIndex::new(&pg); 
+        let mut index = ParticleIndex::new(&pg, 2); 
         let mut particles = vec![p1, p2];
         index.update(&pg, &particles);
         let mut prev_err = 99999.0;
