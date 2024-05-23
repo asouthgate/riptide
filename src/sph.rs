@@ -622,12 +622,12 @@ pub fn leapfrog_ecs(
     h: f32,
 ) {
 
-    let nthread = 10;
-    let n_chunks = 1 + (pdata_new.n_fluid_particles / nthread);
+    let nthread = 12;
+    let n_chunks = nthread.min(pdata_new.n_fluid_particles);
     let chunk_size = pdata_new.n_fluid_particles / n_chunks;
 
     let t0 = Instant::now();
-
+    println!("{} {} {} {}", nthread, n_chunks, chunk_size, pdata_new.n_fluid_particles);
     crossbeam::scope(|s| {
         for (i, ((((a_prev, v_new), v_prev), x_new), x_prev)) in 
             pdata.a.chunks(chunk_size)
@@ -637,10 +637,7 @@ pub fn leapfrog_ecs(
             .zip(pdata.x.chunks(chunk_size))
             .enumerate() 
         {
-            // Calculate the start index for each chunk
             let start = i * chunk_size;
-
-            // Spawn the thread
             s.spawn(move |_| {
                 for k in start..v_prev.len() {
                     v_new[k] = (
