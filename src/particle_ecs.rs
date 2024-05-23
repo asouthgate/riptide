@@ -2,6 +2,7 @@
 ///
 /// This is easy to parallelize, has good locality, and
 /// is easier to convert to GPU than OO implementation. 
+#[derive(Clone)]
 pub struct ParticleData {
     pub x: Vec<(f32, f32)>,
     pub v: Vec<(f32, f32)>,
@@ -19,7 +20,7 @@ pub struct ParticleData {
 }
 
 
-struct ParticleRef<'a> {
+pub struct ParticleRef<'a> {
     pub x: &'a mut (f32, f32),
     pub v: &'a mut (f32, f32),
     pub a: &'a mut (f32, f32),
@@ -35,14 +36,14 @@ struct ParticleRef<'a> {
 
 
 impl ParticleData {
-    fn new(n_particles: usize, n_fluid_particles: usize) -> Self {
+    pub fn new(n_particles: usize, n_fluid_particles: usize) -> Self {
         ParticleData {
             x: vec![(0.0, 0.0); n_particles],
             v: vec![(0.0, 0.0); n_particles],
             a: vec![(0.0, 0.0); n_particles],
             pressure: vec![0.0; n_particles],
-            density: vec![0.0; n_particles],
-            mass: vec![0.0; n_particles],
+            density: vec![1.0; n_particles],
+            mass: vec![1.0; n_particles],
             f_pressure: vec![(0.0, 0.0); n_particles],
             f_viscous: vec![(0.0, 0.0); n_particles],
             f_body: vec![(0.0, 0.0); n_particles],
@@ -52,7 +53,7 @@ impl ParticleData {
             n_fluid_particles: n_fluid_particles
         }
     }
-    fn get_particle_ref(&mut self, pid: usize) -> ParticleRef {
+    pub fn get_particle_ref(&mut self, pid: usize) -> ParticleRef {
         ParticleRef {
             x: &mut self.x[pid],
             v: &mut self.v[pid],

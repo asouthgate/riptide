@@ -1,6 +1,8 @@
 use crate::pixelgrid::PixelGrid;
 use crate::fluid_state::FluidState;
 use crate::particle::Particle;
+use crate::particle_ecs::ParticleData;
+
 
 /// Set the boundary of an (implicitly) rectangular array to zero.
 /// 
@@ -106,4 +108,29 @@ impl SquareBoundary {
             }
         }
     }
+    pub fn enforce_boundary_ecs(
+        &self,
+        pdata: &mut ParticleData,
+    ) {
+        // first naive case
+        for pi in 0..pdata.n_particles {
+            if pdata.x[pi].0 < self.j0 {
+                pdata.x[pi].0 = self.j0;
+                pdata.v[pi].0 = -pdata.v[pi].0  / 2.0;
+            }
+            if pdata.x[pi].0 > self.je {
+                pdata.x[pi].0 = self.je;
+                pdata.v[pi].0 = -pdata.v[pi].0 / 2.0;
+            }
+            if pdata.x[pi].1 < self.i0 {
+                pdata.x[pi].1 = self.i0;
+                pdata.v[pi].1 = -pdata.v[pi].1 / 2.0;
+            }
+            if pdata.x[pi].1 > self.ie {
+                pdata.x[pi].1 = self.ie;
+                pdata.v[pi].1 = -pdata.v[pi].1 / 2.0;
+            }
+        }
+    }
+
 }
