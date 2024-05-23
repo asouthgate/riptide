@@ -2,6 +2,7 @@ pub mod boundary;
 pub mod fluid_macroscopic_features;
 pub mod fluid_state;
 pub mod kernels;
+pub mod leapfrog;
 pub mod momentum;
 pub mod particle;
 pub mod particle_ecs;

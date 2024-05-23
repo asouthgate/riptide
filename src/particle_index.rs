@@ -1,8 +1,10 @@
 use crate::pixelgrid::PixelGrid;
 use crate::particle::Particle;
+use crate::particle_ecs::*;
 
 pub struct ParticleIndex {
-    slots: Vec<Vec<usize>>
+    slots: Vec<Vec<usize>>,
+    pub neighbors: Vec<Vec<usize>>
 }
 
 impl ParticleIndex {
@@ -12,13 +14,15 @@ impl ParticleIndex {
             slots.push(vec![]);
         }
         ParticleIndex {
-            slots: slots
+            slots: slots,
+            neighbors: vec![vec![]]
         }
     }
     pub fn clear(&mut self) {
         for ak in 0..self.slots.len() {
             self.slots[ak].clear();
         }
+        self.neighbors.clear();
     }
     pub fn update(&mut self, pg: &PixelGrid, particles: &Vec<Particle>) {
         self.clear();
@@ -26,6 +30,20 @@ impl ParticleIndex {
             let (x, y) = pg.worldxy2xy(particles[pi].get_x(), particles[pi].get_y());
             let ak = pg.xy2ak(x, y);
             self.slots[ak].push(pi);
+        }
+    }
+    pub fn update_ecs(&mut self, pg: &PixelGrid, pdata: &ParticleData) {
+        self.clear();
+        for pi in 0..pdata.n_particles {
+            let (x, y) = pg.worldxy2xy(pdata.x[pi].0, pdata.x[pi].1);
+            let ak = pg.xy2ak(x, y);
+            self.slots[ak].push(pi);
+        }
+    }
+    pub fn update_neighbors(&mut self, pg: &PixelGrid, pdata: &ParticleData, dist: f32) {
+        for pi in 0..pdata.n_particles {
+            let (x, y) = pdata.x[pi];
+            self.neighbors.push(self.get_nbrs(pg, x, y, dist));
         }
     }
     pub fn get_nbrs(&self, pg: &PixelGrid, wx: f32, wy: f32, dist: f32) -> Vec<usize> {
