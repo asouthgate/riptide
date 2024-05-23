@@ -3,6 +3,7 @@ use crate::particle_ecs::*;
 use crate::pixelgrid::PixelGrid;
 use crate::particle_index::*;
 use crate::kernels::*;
+use std::time::Instant;
 use std::mem;
 
 
@@ -618,8 +619,44 @@ pub fn leapfrog_ecs(
     pdata: &ParticleData,
     pdata_new: &mut ParticleData,
     particle_constants: &ParticleConstants, dt: f32,
-    h: f32
+    h: f32,
 ) {
+
+    let nthread = 10;
+    let n_chunks = 1 + (pdata_new.n_fluid_particles / nthread);
+    let chunk_size = pdata_new.n_fluid_particles / n_chunks;
+
+    let t0 = Instant::now();
+
+    crossbeam::scope(|s| {
+        for (i, ((((a_prev, v_new), v_prev), x_new), x_prev)) in 
+            pdata.a.chunks(chunk_size)
+            .zip(pdata_new.v.chunks_mut(chunk_size))
+            .zip(pdata.v.chunks(chunk_size))
+            .zip(pdata_new.x.chunks_mut(chunk_size))
+            .zip(pdata.x.chunks(chunk_size))
+            .enumerate() 
+        {
+            // Calculate the start index for each chunk
+            let start = i * chunk_size;
+
+            // Spawn the thread
+            s.spawn(move |_| {
+                for k in start..v_prev.len() {
+                    v_new[k] = (
+                        v_prev[k].0 + a_prev[k].0 * dt / 2.0,
+                        v_prev[k].1 + a_prev[k].1 * dt / 2.0
+                    );
+                    x_new[k] = (
+                        x_prev[k].0 + dt * v_new[k].0,
+                        x_prev[k].1 + dt * v_new[k].1
+                    );
+
+                }  
+            });
+        }
+    }).unwrap();
+    let t1 = Instant::now();
 
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
@@ -631,6 +668,9 @@ pub fn leapfrog_ecs(
             pdata.x[k].1 + dt * pdata_new.v[k].1
         );
     }  
+    let t2 = Instant::now();
+    println!("{:?} {:?}", t1-t0, t2-t1);
+
     leapfrog_cal_forces_ecs(
         pg, index, pdata, pdata_new, particle_constants, h
     );
