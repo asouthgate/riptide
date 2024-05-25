@@ -50,9 +50,7 @@ impl ParticleIndex {
         let chunk_size = pdata.n_particles / n_chunks;
     
         let t0 = Instant::now();
-        println!("{} {} {} {}", nthread, n_chunks, chunk_size, pdata.n_fluid_particles);
         let slots = Arc::new(&self.slots);
-        println!("LEN: {}", self.neighbors.len());
         crossbeam::scope(|s| {
             for (i, (x, neighbors)) in 
                 pdata.x.chunks(chunk_size)
@@ -66,7 +64,6 @@ impl ParticleIndex {
                         // println!("{:?} pi\n", pi);
                         // println!("{:?} lenx {:?} pi\n", x.len(), pi);
                         let (wx, wy) = x[pi];
-                        // println!("{:?} xpi {:?} lenx {:?} pi\n", x[pi], x.len(), pi);
                         let (x, y) = pg.worldxy2xy(wx, wy);
                         let i0 = (y - dist).max(0.0) as usize;
                         let ie = (y + dist + 1.0).min(pg.m as f32) as usize;
@@ -86,14 +83,14 @@ impl ParticleIndex {
                 });
             }
         }).unwrap();
-        let t1 = Instant::now();
+        // let t1 = Instant::now();
     
-        for pi in 0..pdata.n_particles {
-            let (x, y) = pdata.x[pi];
-            self.neighbors[pi] = self.get_nbrs(pg, x, y, dist);
-        }
-        let t2 = Instant::now();
-        println!("!!!** {:?} {:?}", t1-t0, t2-t1);
+        // for pi in 0..pdata.n_particles {
+        //     let (x, y) = pdata.x[pi];
+        //     self.neighbors[pi] = self.get_nbrs(pg, x, y, dist);
+        // }
+        // let t2 = Instant::now();
+        // println!("!!!** {:?} {:?}", t1-t0, t2-t1);
 
     }
     pub fn get_nbrs(&self, pg: &PixelGrid, wx: f32, wy: f32, dist: f32) -> Vec<usize> {

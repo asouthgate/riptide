@@ -150,6 +150,8 @@ pub fn update_forces_ecs(
     v: &Vec<(f32, f32)>,
     f_pressure: &mut Vec<(f32, f32)>, 
     f_viscous: &mut Vec<(f32, f32)>,
+    f_surface: &mut Vec<(f32, f32)>,
+    f_body: &mut Vec<(f32, f32)>,
     pressure: &Vec<f32>, 
     density: &Vec<f32>, 
     mass: &Vec<f32>, 
@@ -157,7 +159,9 @@ pub fn update_forces_ecs(
     neighbors: &Vec<Vec<usize>>,
     n_fluid_particles: usize,
     h: f32,
-    mu_mat: &Vec<Vec<f32>>
+    mu_mat: &Vec<Vec<f32>>,
+    s_mat: &Vec<Vec<f32>>,
+    body_force: (f32, f32)
 ) {
 
     let nthread = 12;
@@ -171,9 +175,11 @@ pub fn update_forces_ecs(
     // let neighbors = Arc::new(&neighbors);
 
     crossbeam::scope(|s| {
-        for (i, (f_pressure, f_viscous)) in 
+        for (i, (((f_pressure, f_viscous), f_surface), f_body)) in 
             f_pressure[0..n_fluid_particles].chunks_mut(chunk_size)
             .zip(f_viscous[0..n_fluid_particles].chunks_mut(chunk_size))
+            .zip(f_surface[0..n_fluid_particles].chunks_mut(chunk_size))
+            .zip(f_body[0..n_fluid_particles].chunks_mut(chunk_size))
             .enumerate() 
         {
             let start = i * chunk_size;
@@ -183,17 +189,21 @@ pub fn update_forces_ecs(
             // let neighbors = Arc::clone(&neighbors);
 
             s.spawn(move |_| {
-            
-                for chunk_i in 0..f_pressure.len() { // ignore static particles
+                let c_s = (3.0 * PI) / (2.0 * h);
+
+                for chunk_i in 0..f_pressure.len() { // ignore static particle
                     let i = chunk_i + start;
+                    f_body[chunk_i] = (body_force.0 * density[i], body_force.1 * density[i]);
                     assert!(!x[i].0.is_nan());
                     assert!(!x[i].1.is_nan());
                     assert!(!f_pressure[chunk_i].0.is_nan());
                     assert!(!f_pressure[chunk_i].1.is_nan());
                     f_pressure[chunk_i] = (0.0, 0.0);
                     f_viscous[chunk_i] = (0.0, 0.0);
+                    f_surface[chunk_i] = (0.0, 0.0);
                     let mut ftot = (0.0, 0.0);
                     let mut f_viscous_tot = (0.0, 0.0);
+                    let mut f_surface_tot = (0.0, 0.0);
                     for _nbrj in neighbors[i].iter() {
                         let nbrj = *_nbrj;
                         if nbrj == i {
@@ -222,19 +232,26 @@ pub fn update_forces_ecs(
                         // assert!(!fij.0.is_nan());
                         // assert!(!fij.1.is_nan());
                         let r2 = dx.powi(2) + dy.powi(2);
+                        let r = r2.powf(0.5);
                         let du = v[i].0 - v[nbrj].0;
                         let dv = v[i].1 - v[nbrj].1;
                         let muij = mu_mat[particle_type[i]][particle_type[nbrj]];
                         let a = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
                         let b = (grad.0 * du) + (grad.1 * dv);
                         let c = (dx / r2, dy / r2);
+
+                        if r < h {
+                            let s = s_mat[particle_type[i]][particle_type[nbrj]];
+                            f_surface_tot.0 += s * (c_s * r).cos() * dx / r;
+                            f_surface_tot.1 += s * (c_s * r).cos() * dy / r;
+                        }
+
                         f_viscous_tot.0 += muij * a * b * c.0;
                         f_viscous_tot.1 += muij * a * b * c.1;
                     }
                     f_pressure[chunk_i] = ftot;
                     f_viscous[chunk_i] = f_viscous_tot;
-
-                    
+                    f_surface[chunk_i] = f_surface_tot;
                 }
             });
         }
@@ -738,24 +755,16 @@ pub fn leapfrog_cal_forces_ecs(
         &particle_constants.rho0_vec, 
         &particle_constants.c2_vec
     );
-    update_body_forces_ecs(
-        &mut pdata_new.f_body, &pdata_new.density, pdata.n_fluid_particles, particle_constants.body_force
-    );
-    update_surface_forces_ecs(
-        &pdata_new.x,
-        &mut pdata_new.f_surface,
-        &pdata.particle_type,
-        &pindex.neighbors,
-        pdata.n_fluid_particles,
-        h,
-        &particle_constants.s_mat
-    );
-
+    // update_body_forces_ecs(
+    //     &mut pdata_new.f_body, &pdata_new.density, pdata.n_fluid_particles, particle_constants.body_force
+    // );
     update_forces_ecs(
         &pdata_new.x,
         &pdata_new.v,
         &mut pdata_new.f_pressure,
         &mut pdata_new.f_viscous,
+        &mut pdata_new.f_surface,
+        &mut pdata_new.f_body,
         &pdata_new.pressure, 
         &pdata_new.density,
         &pdata.mass,
@@ -763,30 +772,10 @@ pub fn leapfrog_cal_forces_ecs(
         &pindex.neighbors,
         pdata.n_fluid_particles,
         h, 
-        &particle_constants.mu_mat
+        &particle_constants.mu_mat,
+        &particle_constants.s_mat,
+        particle_constants.body_force
     )
-    // update_viscous_forces_ecs(
-    //     &pdata_new.x,
-    //     &pdata_new.v,
-    //     &mut pdata_new.f_viscous,
-    //     &pdata.particle_type,
-    //     &pdata.mass,
-    //     &pdata_new.density,
-    //     &pindex.neighbors,
-    //     pdata.n_fluid_particles,
-    //     h, 
-    //     &particle_constants.mu_mat
-    // );
-    // update_pressure_forces_ecs(
-    //     &pdata_new.x, 
-    //     &mut pdata_new.f_pressure, 
-    //     &pdata_new.pressure, 
-    //     &pdata_new.density,
-    //     &pdata.mass,
-    //     &pindex.neighbors,
-    //     pdata.n_fluid_particles,
-    //     h    
-    // );
 }
 
 
@@ -851,38 +840,38 @@ pub fn leapfrog_ecs(
     h: f32,
 ) {
 
-    let nthread = 12;
-    let n_chunks = nthread.min(pdata_new.n_fluid_particles);
-    let chunk_size = pdata_new.n_fluid_particles / n_chunks;
+    // let nthread = 12;
+    // let n_chunks = nthread.min(pdata_new.n_fluid_particles);
+    // let chunk_size = pdata_new.n_fluid_particles / n_chunks;
 
-    let t0 = Instant::now();
-    println!("{} {} {} {}", nthread, n_chunks, chunk_size, pdata_new.n_fluid_particles);
-    crossbeam::scope(|s| {
-        for (i, ((((a_prev, v_new), v_prev), x_new), x_prev)) in 
-            pdata.a.chunks(chunk_size)
-            .zip(pdata_new.v.chunks_mut(chunk_size))
-            .zip(pdata.v.chunks(chunk_size))
-            .zip(pdata_new.x.chunks_mut(chunk_size))
-            .zip(pdata.x.chunks(chunk_size))
-            .enumerate() 
-        {
-            let start = i * chunk_size;
-            s.spawn(move |_| {
-                for k in start..v_prev.len() {
-                    v_new[k] = (
-                        v_prev[k].0 + a_prev[k].0 * dt / 2.0,
-                        v_prev[k].1 + a_prev[k].1 * dt / 2.0
-                    );
-                    x_new[k] = (
-                        x_prev[k].0 + dt * v_new[k].0,
-                        x_prev[k].1 + dt * v_new[k].1
-                    );
+    // let t0 = Instant::now();
+    // println!("{} {} {} {}", nthread, n_chunks, chunk_size, pdata_new.n_fluid_particles);
+    // crossbeam::scope(|s| {
+    //     for (i, ((((a_prev, v_new), v_prev), x_new), x_prev)) in 
+    //         pdata.a.chunks(chunk_size)
+    //         .zip(pdata_new.v.chunks_mut(chunk_size))
+    //         .zip(pdata.v.chunks(chunk_size))
+    //         .zip(pdata_new.x.chunks_mut(chunk_size))
+    //         .zip(pdata.x.chunks(chunk_size))
+    //         .enumerate() 
+    //     {
+    //         let start = i * chunk_size;
+    //         s.spawn(move |_| {
+    //             for k in start..v_prev.len() {
+    //                 v_new[k] = (
+    //                     v_prev[k].0 + a_prev[k].0 * dt / 2.0,
+    //                     v_prev[k].1 + a_prev[k].1 * dt / 2.0
+    //                 );
+    //                 x_new[k] = (
+    //                     x_prev[k].0 + dt * v_new[k].0,
+    //                     x_prev[k].1 + dt * v_new[k].1
+    //                 );
 
-                }  
-            });
-        }
-    }).unwrap();
-    let t1 = Instant::now();
+    //             }  
+    //         });
+    //     }
+    // }).unwrap();
+    // let t1 = Instant::now();
 
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
@@ -894,8 +883,8 @@ pub fn leapfrog_ecs(
             pdata.x[k].1 + dt * pdata_new.v[k].1
         );
     }  
-    let t2 = Instant::now();
-    println!("{:?} {:?}", t1-t0, t2-t1);
+    // let t2 = Instant::now();
+    // println!("{:?} {:?}", t1-t0, t2-t1);
 
     leapfrog_cal_forces_ecs(
         pg, index, pdata, pdata_new, particle_constants, h
