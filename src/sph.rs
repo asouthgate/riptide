@@ -5,6 +5,7 @@ use crate::particle_index::*;
 use crate::kernels::*;
 use std::time::Instant;
 use std::mem;
+use std::sync::Arc;
 
 
 const PI: f32 = 3.141592653589793;
@@ -144,6 +145,110 @@ pub fn update_densities(
 /// * `particle_data`
 /// * `pindex`
 /// * `h` - characteristic length
+pub fn update_forces_ecs(
+    x: &Vec<(f32, f32)>, 
+    v: &Vec<(f32, f32)>,
+    f_pressure: &mut Vec<(f32, f32)>, 
+    f_viscous: &mut Vec<(f32, f32)>,
+    pressure: &Vec<f32>, 
+    density: &Vec<f32>, 
+    mass: &Vec<f32>, 
+    particle_type: &Vec<usize>,
+    neighbors: &Vec<Vec<usize>>,
+    n_fluid_particles: usize,
+    h: f32,
+    mu_mat: &Vec<Vec<f32>>
+) {
+
+    let nthread = 12;
+    let n_chunks = nthread.min(n_fluid_particles);
+    let chunk_size = n_fluid_particles / n_chunks;
+
+    let t0 = Instant::now();
+    // let pressure = Arc::new(&pressure);
+    // let mass = Arc::new(&mass);
+    // let density = Arc::new(&density);
+    // let neighbors = Arc::new(&neighbors);
+
+    crossbeam::scope(|s| {
+        for (i, (f_pressure, f_viscous)) in 
+            f_pressure[0..n_fluid_particles].chunks_mut(chunk_size)
+            .zip(f_viscous[0..n_fluid_particles].chunks_mut(chunk_size))
+            .enumerate() 
+        {
+            let start = i * chunk_size;
+            // let pressure = Arc::clone(&pressure);
+            // let mass = Arc::clone(&mass);
+            // let density = Arc::clone(&density);
+            // let neighbors = Arc::clone(&neighbors);
+
+            s.spawn(move |_| {
+            
+                for chunk_i in 0..f_pressure.len() { // ignore static particles
+                    let i = chunk_i + start;
+                    assert!(!x[i].0.is_nan());
+                    assert!(!x[i].1.is_nan());
+                    assert!(!f_pressure[chunk_i].0.is_nan());
+                    assert!(!f_pressure[chunk_i].1.is_nan());
+                    f_pressure[chunk_i] = (0.0, 0.0);
+                    f_viscous[chunk_i] = (0.0, 0.0);
+                    let mut ftot = (0.0, 0.0);
+                    let mut f_viscous_tot = (0.0, 0.0);
+                    for _nbrj in neighbors[i].iter() {
+                        let nbrj = *_nbrj;
+                        if nbrj == i {
+                            continue;
+                        }
+                        let dx = x[i].0 - x[nbrj].0;
+                        let dy = x[i].1 - x[nbrj].1;
+                        // assert!(!dx.is_nan());
+                        // assert!(!dy.is_nan());
+                        // assert!(dx.powi(2) + dy.powi(2) > 0.0);
+                        let grad = debrun_spiky_kernel_grad(dx, dy, h);
+                        // assert!(!grad.0.is_nan());
+                        // assert!(!grad.1.is_nan());
+                        // assert!(density[i] != 0.0);
+                        // assert!(density[nbrj] != 0.0);
+                        let fij = cal_pressure_force_ij(
+                            pressure[i],
+                            pressure[nbrj],
+                            density[i],
+                            density[nbrj],
+                            mass[nbrj],
+                            grad
+                        );
+                        ftot.0 += fij.0;
+                        ftot.1 += fij.1;
+                        // assert!(!fij.0.is_nan());
+                        // assert!(!fij.1.is_nan());
+                        let r2 = dx.powi(2) + dy.powi(2);
+                        let du = v[i].0 - v[nbrj].0;
+                        let dv = v[i].1 - v[nbrj].1;
+                        let muij = mu_mat[particle_type[i]][particle_type[nbrj]];
+                        let a = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
+                        let b = (grad.0 * du) + (grad.1 * dv);
+                        let c = (dx / r2, dy / r2);
+                        f_viscous_tot.0 += muij * a * b * c.0;
+                        f_viscous_tot.1 += muij * a * b * c.1;
+                    }
+                    f_pressure[chunk_i] = ftot;
+                    f_viscous[chunk_i] = f_viscous_tot;
+
+                    
+                }
+            });
+        }
+    }).unwrap();
+    let t1 = Instant::now();
+    println!("pressure_viscous {:?}", t1-t0);
+}
+
+
+// Update particle pressure forces.
+//
+/// * `particle_data`
+/// * `pindex`
+/// * `h` - characteristic length
 pub fn update_pressure_forces_ecs(
     x: &Vec<(f32, f32)>, 
     f_pressure: &mut Vec<(f32, f32)>, 
@@ -154,6 +259,77 @@ pub fn update_pressure_forces_ecs(
     n_fluid_particles: usize,
     h: f32
 ) {
+
+    let nthread = 12;
+    let n_chunks = nthread.min(n_fluid_particles);
+    let chunk_size = n_fluid_particles / n_chunks;
+
+    let t0 = Instant::now();
+    // let pressure = Arc::new(&pressure);
+    // let mass = Arc::new(&mass);
+    // let density = Arc::new(&density);
+    // let neighbors = Arc::new(&neighbors);
+
+    crossbeam::scope(|s| {
+        for (i, f_pressure) in 
+            f_pressure[0..n_fluid_particles].chunks_mut(chunk_size)
+            .enumerate() 
+        {
+            let start = i * chunk_size;
+            // let pressure = Arc::clone(&pressure);
+            // let mass = Arc::clone(&mass);
+            // let density = Arc::clone(&density);
+            // let neighbors = Arc::clone(&neighbors);
+
+            s.spawn(move |_| {
+            
+                for chunk_i in 0..f_pressure.len() { // ignore static particles
+                    let i = chunk_i + start;
+                    assert!(!x[i].0.is_nan());
+                    assert!(!x[i].1.is_nan());
+                    f_pressure[chunk_i] = (0.0, 0.0);
+                    let mut ftot = (0.0, 0.0);
+                    for _nbrj in neighbors[i].iter() {
+                        let nbrj = *_nbrj;
+                        if nbrj == i {
+                            continue;
+                        }
+                        let dx = x[i].0 - x[nbrj].0;
+                        let dy = x[i].1 - x[nbrj].1;
+                        assert!(!dx.is_nan());
+                        assert!(!dy.is_nan());
+                        if dx.powi(2) + dy.powi(2) == 0.0 {
+                            println!("{} {} {} {} ", i, chunk_i, nbrj, dx.powi(2) + dy.powi(2));
+                        }
+                        assert!(dx.powi(2) + dy.powi(2) > 0.0);
+                        let grad = debrun_spiky_kernel_grad(dx, dy, h);
+                        assert!(!grad.0.is_nan());
+                        assert!(!grad.1.is_nan());
+                        assert!(density[i] != 0.0);
+                        assert!(density[nbrj] != 0.0);
+                        let fij = cal_pressure_force_ij(
+                            pressure[i],
+                            pressure[nbrj],
+                            density[i],
+                            density[nbrj],
+                            mass[nbrj],
+                            grad
+                        );
+                        ftot.0 += fij.0;
+                        ftot.1 += fij.1;
+                        assert!(!fij.0.is_nan());
+                        assert!(!fij.1.is_nan());
+                    }
+                    f_pressure[chunk_i] = ftot;
+                    assert!(!f_pressure[chunk_i].0.is_nan());
+                    assert!(!f_pressure[chunk_i].1.is_nan());
+                }
+            });
+        }
+    }).unwrap();
+    let t1 = Instant::now();
+
+    
     for i in 0..n_fluid_particles { // ignore static particles
         assert!(!x[i].0.is_nan());
         assert!(!x[i].1.is_nan());
@@ -191,6 +367,11 @@ pub fn update_pressure_forces_ecs(
         assert!(!f_pressure[i].0.is_nan());
         assert!(!f_pressure[i].1.is_nan());
     }
+
+    let t2 = Instant::now();
+
+    println!("press {:?} {:?}", t1-t0, t2-t1);
+
 }
 
 // Update particle pressure forces.
@@ -384,32 +565,65 @@ pub fn update_viscous_forces_ecs(
     h: f32, 
     mu_mat: &Vec<Vec<f32>>
 ) {
-    for i in 0..n_fluid_particles {
-        f_viscous[i] = (0.0, 0.0);
-        assert!(!x[i].0.is_nan());
-        assert!(!x[i].1.is_nan());
-        let mut f_viscous_tot = (0.0, 0.0);
-        for _nbrj in neighbors[i].iter() {
-            let nbrj = *_nbrj;
-            if nbrj == i {
-                continue;
-            }
-            let dx = x[i].0 - x[nbrj].0;
-            let dy = x[i].1 - x[nbrj].1;
-            let r2 = dx.powi(2) + dy.powi(2);
-            let du = v[i].0 - v[nbrj].0;
-            let dv = v[i].1 - v[nbrj].1;
-            let grad = debrun_spiky_kernel_grad(dx, dy, h);
-            let muij = mu_mat[particle_type[i]][particle_type[nbrj]];
-            let a = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
-            let b = (grad.0 * du) + (grad.1 * dv);
-            let c = (dx / r2, dy / r2);
-            f_viscous_tot.0 += muij * a * b * c.0;
-            f_viscous_tot.1 += muij * a * b * c.1;
 
+
+    let nthread = 12;
+    let n_chunks = nthread.min(n_fluid_particles);
+    let chunk_size = n_fluid_particles / n_chunks;
+
+    let t0 = Instant::now();
+    let x = Arc::new(&x);
+    let v = Arc::new(&v);
+    let particle_type = Arc::new(&particle_type);
+    let mass = Arc::new(&mass);
+    let density = Arc::new(&density);
+    let neighbors = Arc::new(&neighbors);
+
+    crossbeam::scope(|s| {
+        for (i, f_viscous) in 
+            f_viscous.chunks_mut(chunk_size)
+            .enumerate() 
+        {
+            let start = i * chunk_size;
+            let x = Arc::clone(&x);
+            let v = Arc::clone(&v);
+            let particle_type = Arc::clone(&particle_type);
+            let mass = Arc::clone(&mass);
+            let density = Arc::clone(&density);
+            let neighbors = Arc::clone(&neighbors);
+
+            s.spawn(move |_| {
+                for chunk_i in 0..f_viscous.len() {
+                    let i = start + chunk_i;
+                    f_viscous[chunk_i] = (0.0, 0.0);
+                    assert!(!x[i].0.is_nan());
+                    assert!(!x[i].1.is_nan());
+                    let mut f_viscous_tot = (0.0, 0.0);
+                    for _nbrj in neighbors[i].iter() {
+                        let nbrj = *_nbrj;
+                        if nbrj == i {
+                            continue;
+                        }
+                        let dx = x[i].0 - x[nbrj].0;
+                        let dy = x[i].1 - x[nbrj].1;
+                        let r2 = dx.powi(2) + dy.powi(2);
+                        let du = v[i].0 - v[nbrj].0;
+                        let dv = v[i].1 - v[nbrj].1;
+                        let grad = debrun_spiky_kernel_grad(dx, dy, h);
+                        let muij = mu_mat[particle_type[i]][particle_type[nbrj]];
+                        let a = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
+                        let b = (grad.0 * du) + (grad.1 * dv);
+                        let c = (dx / r2, dy / r2);
+                        f_viscous_tot.0 += muij * a * b * c.0;
+                        f_viscous_tot.1 += muij * a * b * c.1;
+            
+                    }
+                    f_viscous[chunk_i] = f_viscous_tot;
+                }
+            });
         }
-        f_viscous[i] = f_viscous_tot;
-    }
+    }).unwrap();
+    let t1 = Instant::now();
 }
 
 
@@ -516,6 +730,14 @@ pub fn leapfrog_cal_forces_ecs(
     update_densities_ecs(
         &pdata_new.x, &pdata.mass, &mut pdata_new.density, &pindex.neighbors, pdata.n_particles, h
     );
+    update_pressures_ecs(
+        &mut pdata_new.pressure,
+        &pdata_new.density,
+        &pdata.particle_type,
+        pdata.n_particles,
+        &particle_constants.rho0_vec, 
+        &particle_constants.c2_vec
+    );
     update_body_forces_ecs(
         &mut pdata_new.f_body, &pdata_new.density, pdata.n_fluid_particles, particle_constants.body_force
     );
@@ -528,36 +750,43 @@ pub fn leapfrog_cal_forces_ecs(
         h,
         &particle_constants.s_mat
     );
-    update_viscous_forces_ecs(
+
+    update_forces_ecs(
         &pdata_new.x,
         &pdata_new.v,
+        &mut pdata_new.f_pressure,
         &mut pdata_new.f_viscous,
-        &pdata.particle_type,
-        &pdata.mass,
+        &pdata_new.pressure, 
         &pdata_new.density,
+        &pdata.mass,
+        &pdata.particle_type,
         &pindex.neighbors,
         pdata.n_fluid_particles,
         h, 
         &particle_constants.mu_mat
-    );
-    update_pressures_ecs(
-        &mut pdata_new.pressure,
-        &pdata_new.density,
-        &pdata.particle_type,
-        pdata.n_particles,
-        &particle_constants.rho0_vec, 
-        &particle_constants.c2_vec
-    );
-    update_pressure_forces_ecs(
-        &pdata_new.x, 
-        &mut pdata_new.f_pressure, 
-        &pdata_new.pressure, 
-        &pdata_new.density,
-        &pdata.mass,
-        &pindex.neighbors,
-        pdata.n_fluid_particles,
-        h    
-    );
+    )
+    // update_viscous_forces_ecs(
+    //     &pdata_new.x,
+    //     &pdata_new.v,
+    //     &mut pdata_new.f_viscous,
+    //     &pdata.particle_type,
+    //     &pdata.mass,
+    //     &pdata_new.density,
+    //     &pindex.neighbors,
+    //     pdata.n_fluid_particles,
+    //     h, 
+    //     &particle_constants.mu_mat
+    // );
+    // update_pressure_forces_ecs(
+    //     &pdata_new.x, 
+    //     &mut pdata_new.f_pressure, 
+    //     &pdata_new.pressure, 
+    //     &pdata_new.density,
+    //     &pdata.mass,
+    //     &pindex.neighbors,
+    //     pdata.n_fluid_particles,
+    //     h    
+    // );
 }
 
 
