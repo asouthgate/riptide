@@ -81,7 +81,7 @@ mod tests {
         for k in 0..20 {
             pd.x[k] = (k as f32, 0.0);
         }
-        let mut pref = pd.get_particle_ref(7);
+        let pref = pd.get_particle_ref(7);
         *pref.x = (99.0, -99.0);
         assert!(pd.x[7] == (99.0, -99.0));
     }

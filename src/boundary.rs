@@ -116,19 +116,19 @@ impl SquareBoundary {
         for pi in 0..pdata.n_particles {
             if pdata.x[pi].0 < self.j0 {
                 pdata.x[pi].0 = self.j0;
-                pdata.v[pi].0 = -pdata.v[pi].0  / 2.0;
+                pdata.v[pi].0 = -pdata.v[pi].0;
             }
             if pdata.x[pi].0 > self.je {
                 pdata.x[pi].0 = self.je;
-                pdata.v[pi].0 = -pdata.v[pi].0 / 2.0;
+                pdata.v[pi].0 = -pdata.v[pi].0;
             }
             if pdata.x[pi].1 < self.i0 {
                 pdata.x[pi].1 = self.i0;
-                pdata.v[pi].1 = -pdata.v[pi].1 / 2.0;
+                pdata.v[pi].1 = -pdata.v[pi].1;
             }
             if pdata.x[pi].1 > self.ie {
                 pdata.x[pi].1 = self.ie;
-                pdata.v[pi].1 = -pdata.v[pi].1 / 2.0;
+                pdata.v[pi].1 = -pdata.v[pi].1;
             }
         }
     }

@@ -4,8 +4,6 @@ use crate::pixelgrid::PixelGrid;
 use crate::particle_index::*;
 use crate::kernels::*;
 use std::time::Instant;
-use std::mem;
-use std::sync::Arc;
 
 
 const PI: f32 = 3.141592653589793;
@@ -360,7 +358,8 @@ pub fn leapfrog_ecs(
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use std::mem;
+    
     #[test]
     fn test_cal_p() {
         assert!(cal_pressure(1.0, 0.0, 1.0) == 1.0);

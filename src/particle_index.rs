@@ -1,7 +1,6 @@
 use crate::pixelgrid::PixelGrid;
 use crate::particle::Particle;
 use crate::particle_ecs::*;
-use std::time::Instant;
 use std::sync::Arc;
 
 pub struct ParticleIndex {
@@ -49,15 +48,13 @@ impl ParticleIndex {
         let n_chunks = nthread.min(pdata.n_particles);
         let chunk_size = pdata.n_particles / n_chunks;
     
-        let t0 = Instant::now();
+        // let t0 = Instant::now();
         let slots = Arc::new(&self.slots);
         crossbeam::scope(|s| {
-            for (i, (x, neighbors)) in 
+            for (x, neighbors) in 
                 pdata.x.chunks(chunk_size)
                 .zip(self.neighbors.chunks_mut(chunk_size))
-                .enumerate() 
             {
-                let start = i * chunk_size;
                 let slots = Arc::clone(&slots);
                 s.spawn(move |_| {
                     for pi in 0..x.len() {
