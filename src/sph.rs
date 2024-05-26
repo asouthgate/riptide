@@ -285,9 +285,13 @@ pub fn leapfrog_cal_forces_ecs(
     particle_constants: &ParticleConstants,
     h: f32
 ) {
+
+    let t0 = Instant::now();
+
     let max_dist = h * 1.0;
-    pindex.update_ecs(pg, pdata);
-    pindex.update_neighbors(pg, pdata, max_dist);
+    pindex.update(pg, &pdata.x);
+    pindex.update_neighbors(pg, &pdata.x, max_dist as i32);
+    let t1 = Instant::now();
 
     // update forces
     update_densities_ecs(
@@ -301,6 +305,8 @@ pub fn leapfrog_cal_forces_ecs(
         &particle_constants.rho0_vec, 
         &particle_constants.c2_vec
     );
+    let t2 = Instant::now();
+
     update_forces_ecs(
         &pdata_new.x,
         &pdata_new.v,
@@ -318,7 +324,10 @@ pub fn leapfrog_cal_forces_ecs(
         &particle_constants.mu_mat,
         &particle_constants.s_mat,
         particle_constants.body_force
-    )
+    );
+    let t3 = Instant::now();
+    println!("\t\t cal forces: {:?}, updates {:?}, nbrs {:?}", t3-t2, t2-t1, t1-t0);
+
 }
 
 pub fn cal_dt(safety: f32, viscous_safety: f32, h: f32, cmax: f32, vmax: f32, mumax: f32) -> f32 {
@@ -336,6 +345,7 @@ pub fn leapfrog_ecs(
     h: f32,
 ) -> f32 {
 
+    let t0 = Instant::now();
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
             pdata.v[k].0 + pdata.a[k].0 * dt / 2.0,
@@ -346,12 +356,16 @@ pub fn leapfrog_ecs(
             pdata.x[k].1 + dt * pdata_new.v[k].1
         );
     }  
+    let t1 = Instant::now();
 
     leapfrog_cal_forces_ecs(
         pg, index, pdata, pdata_new, particle_constants, h
     );
+    let t2 = Instant::now();
+
     leapfrog_update_acceleration_ecs(pdata_new);
-    
+    let t3 = Instant::now();
+
     let mut maxvsq: f32 = 0.0;
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
@@ -360,6 +374,8 @@ pub fn leapfrog_ecs(
         );
         maxvsq = maxvsq.max(pdata_new.v[k].0.powi(2) + pdata_new.v[k].1.powi(2));
     }  
+    let t4 = Instant::now();
+    println!("\t v1: {:?}, acc {:?}, forces {:?}, v2 {:?}", t4-t3, t3-t2, t2-t1, t1-t0);
     maxvsq.powf(0.5)
 }
 
@@ -397,7 +413,7 @@ mod tests {
         pdata.x[1] = (10.5, 10.0);
         let pg = PixelGrid::new(1000, 1000);
         let mut index = ParticleIndex::new(&pg, 2); 
-        index.update_ecs(&pg, &pdata);
+        index.update(&pg, &pdata.x);
         let mut prev_err = 99999.0;
 
         let pc = ParticleConstants {
