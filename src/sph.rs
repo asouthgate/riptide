@@ -321,6 +321,12 @@ pub fn leapfrog_cal_forces_ecs(
     )
 }
 
+pub fn cal_dt(safety: f32, viscous_safety: f32, h: f32, cmax: f32, vmax: f32, mumax: f32) -> f32 {
+    let a = safety * h / (vmax + cmax);
+    let b = viscous_safety * h.powi(2) / mumax;
+    a.min(b)
+}
+
 
 pub fn leapfrog_ecs(
     pg: &PixelGrid, index: &mut ParticleIndex,
@@ -328,7 +334,7 @@ pub fn leapfrog_ecs(
     pdata_new: &mut ParticleData,
     particle_constants: &ParticleConstants, dt: f32,
     h: f32,
-) {
+) -> f32 {
 
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
@@ -346,12 +352,15 @@ pub fn leapfrog_ecs(
     );
     leapfrog_update_acceleration_ecs(pdata_new);
     
+    let mut maxvsq: f32 = 0.0;
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
             pdata_new.v[k].0 + pdata_new.a[k].0 * dt / 2.0,
             pdata_new.v[k].1 + pdata_new.a[k].1 * dt / 2.0
         );
+        maxvsq = maxvsq.max(pdata_new.v[k].0.powi(2) + pdata_new.v[k].1.powi(2));
     }  
+    maxvsq.powf(0.5)
 }
 
 
@@ -359,7 +368,7 @@ pub fn leapfrog_ecs(
 mod tests {
     use super::*;
     use std::mem;
-    
+
     #[test]
     fn test_cal_p() {
         assert!(cal_pressure(1.0, 0.0, 1.0) == 1.0);
