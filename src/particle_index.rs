@@ -79,11 +79,13 @@ impl ParticleIndex {
                     let nbrj = self.start2neighbors[k];
                     result.push(nbrj);
                 }
+                // println!("\t\t({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {} -> {:?}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end, result);
             }
         }
         result
     }
     pub fn get_nbrs_nine_slice<'a>(&'a self, pg: &PixelGrid, wx: f32, wy: f32) -> [&'a [usize]; 9] {
+        // println!("\tGetting nbrs at {} {}", wx, wy);
         let mut result: [&[usize]; 9] = [&[]; 9];
         let mut idx = 0;
         for dj in -1..=1 {
@@ -94,15 +96,16 @@ impl ParticleIndex {
                 }
 
                 let (x, y) = pg.worldxy2xy(wxt, wyt);
-                // println!("{:?} -> {:?} -> {:?}", (wx, wy), (wxt, wyt), (x, y));
                 let ak = pg.xy2ak(x, y);
+                // println!("{:?} -> {:?} -> {:?} -> {}", (wx, wy), (wxt, wyt), (x, y), ak);
                 let start = self.ak2start[ak];
-                // println!("({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end);
                 if start >= self.start2neighbors.len() {
+                    // println!("\t\t({} {}) -> ({} {}) -> ({} {}) -> {} -> {} EMPTY", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start);
                     result[idx] = &[];
                 } else {
                     let end = self.ak2end[ak];
                     result[idx] = &self.start2neighbors[start..end];
+                    // println!("\t\t({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {} -> {:?}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end, result[idx]);
                 }
                 idx += 1;
             }

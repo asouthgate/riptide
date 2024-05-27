@@ -96,24 +96,24 @@ pub fn update_densities_ecs(
     x: &Vec<(f32, f32)>,
     mass: &Vec<f32>,
     density: &mut Vec<f32>,
-    neighbors: &Vec<Vec<usize>>,
+    pindex: &ParticleIndex,
     n_particles: usize,
-    h: f32
+    h: f32,
+    pg: &PixelGrid,
 ) {
-    for i in 0..n_particles {
-        // println!("{:?}", x[i]);
-        // println!("{:?}", mass[i]);
-        // println!("{:?}", density[i]);
-        // println!("{:?}", neighbors[i]);
 
+    for i in 0..n_particles {
         assert!(!x[i].0.is_nan());
         assert!(!x[i].1.is_nan());
         density[i] = 0.0;
-        for j in neighbors[i].iter() {
-            let rij = cal_dist(x[i], x[*j]);
-            let contrib = cal_rho_ij(mass[*j], rij, h);
-            density[i] += contrib; 
-            assert!(!density[i].is_nan());
+        let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
+        for (slicei, slice) in slices.iter().enumerate() {
+            for &j in *slice {
+                let rij = cal_dist(x[i], x[j]);
+                let contrib = cal_rho_ij(mass[j], rij, h);
+                density[i] += contrib; 
+                assert!(!density[i].is_nan());
+            }
         }
     }
 }
@@ -298,14 +298,14 @@ pub fn leapfrog_cal_forces_ecs(
     let t0 = Instant::now();
 
     let max_dist = h * 1.0;
-    pindex.update(pg, &pdata.x);
+    pindex.update(pg, &pdata_new.x); // should be new
     let t1_2 = Instant::now();
-    pindex.update_neighbors(pg, &pdata.x, max_dist as i32);
+    // pindex.update_neighbors(pg, &pdata_new.x, 1);
     let t1 = Instant::now();
 
     // update forces
     update_densities_ecs(
-        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &pindex.neighbors, pdata.n_particles, h
+        &pdata_new.x, &pdata.mass, &mut pdata_new.density, pindex, pdata.n_particles, h, pg
     );
     update_pressures_ecs(
         &mut pdata_new.pressure,
@@ -328,7 +328,7 @@ pub fn leapfrog_cal_forces_ecs(
         &pdata_new.density,
         &pdata.mass,
         &pdata.particle_type,
-        &pindex,
+        pindex,
         pdata.n_fluid_particles,
         h, 
         &particle_constants.mu_mat,
