@@ -83,6 +83,28 @@ impl ParticleIndex {
         }
         result
     }
+    pub fn get_nbrs_nine_slice<'a>(&'a self, pg: &PixelGrid, wx: f32, wy: f32) -> [&'a [usize]; 9] {
+        let mut result: [&[usize]; 9] = [&[]; 9];
+        let mut idx = 0;
+        for dj in -1..=1 {
+            for di in -1..=1 {
+                let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
+                if (wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h) {
+                    continue;
+                }
+
+                let (x, y) = pg.worldxy2xy(wxt, wyt);
+                // println!("{:?} -> {:?} -> {:?}", (wx, wy), (wxt, wyt), (x, y));
+                let ak = pg.xy2ak(x, y);
+                let start = self.ak2start[ak];
+                let end = self.ak2end[ak];
+                // println!("({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end);
+                result[idx] = &self.start2neighbors[start..end];
+                idx += 1;
+            }
+        }
+        result
+    }
     pub fn update_neighbors(&mut self, pg: &PixelGrid, x: &Vec<(f32, f32)>, dist: i32) {
         for pi in 0..x.len() {
             self.neighbors[pi].clear();
@@ -181,6 +203,17 @@ mod tests {
         assert!(nbrs.len() == 10);
         println!("{} {}: {:?}", 1.5, 1.5, nbrs);
         assert!(nbrs.contains(&0));
+
+        // Check that nine_slice does the same thing.
+        let slices = index.get_nbrs_nine_slice(&pg, 1.5, 1.5);
+        let mut res = vec![];
+        for (i, slice) in slices.iter().enumerate() {
+            for &ind in *slice {
+                res.push(ind);
+                assert!(nbrs.contains(&ind));
+            }
+        }
+        assert!(res.len() == nbrs.len());
 
 
     }
