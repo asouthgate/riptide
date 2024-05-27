@@ -64,10 +64,13 @@ impl ParticleIndex {
         let mut result = vec![];
         for dj in -dist..dist+1 {
             for di in -dist..dist+1 {
-                let (x, y) = pg.worldxy2xy(wx + di as f32, wy + dj as f32);
-                if (x < pg.x || x >= pg.x + pg.w || y < pg.y || y >= pg.h) {
+                let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
+                if (wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h) {
                     continue;
                 }
+
+                let (x, y) = pg.worldxy2xy(wxt, wyt);
+                // println!("{:?} -> {:?} -> {:?}", (wx, wy), (wxt, wyt), (x, y));
                 let ak = pg.xy2ak(x, y);
                 let start = self.ak2start[ak];
                 let end = self.ak2end[ak];
@@ -83,9 +86,8 @@ impl ParticleIndex {
     pub fn update_neighbors(&mut self, pg: &PixelGrid, x: &Vec<(f32, f32)>, dist: i32) {
         for pi in 0..x.len() {
             self.neighbors[pi].clear();
-            let (x, y) = pg.worldxy2xy(x[pi].0, x[pi].1);
-            let mut nbrs = self.get_nbrs(pg, x, y, dist);
-            self.neighbors[pi].append(&mut nbrs);
+            let mut nbrs = self.get_nbrs(pg, x[pi].0, x[pi].1, dist);
+            self.neighbors[pi] = nbrs;
         }
     }
 }
@@ -129,7 +131,7 @@ mod tests {
     #[test]
     fn test_particle_retrieval() {
         // in this scenario, only two particles; only a few slots have them
-        let pg = PixelGrid::new(10, 10);
+        let pg = PixelGrid::new_with_transform(10, 10, 1.0, 1.0, -5.0, -5.0);
 
         let n_particles = pg.n * pg.m;
         let mut pdata = ParticleData::new(n_particles, n_particles);
@@ -137,43 +139,47 @@ mod tests {
         // arrange the particles on a grid
         for i in 0..pg.m {
             for j in 0..pg.n {
-                pdata.x[i * pg.n + j] = (j as f32 + 0.5, i as f32 + 0.5);
+                pdata.x[i * pg.n + j] = (-5.0 + j as f32 + 0.5, -5.0 + i as f32 + 0.5);
             }
         }
         let mut index = ParticleIndex::new(&pg, n_particles);
         index.update(&pg, &pdata.x);
+        index.update_neighbors(&pg, &pdata.x, 1);
 
-        let nbrs = index.get_nbrs(&pg, 0.0, 0.0, 1);
-        println!("{} {}: {:?}", 0.0, 0.0, nbrs);
+        let nbrs = index.get_nbrs(&pg, -5.0, -5.0, 1);
+        println!("{} {}: {:?} {:?}", -5.0, -5.0, nbrs, index.neighbors[0]);
         assert!(nbrs.len() == 4);
         assert!(nbrs == vec![0, 1, 10, 11]);
+        assert!(nbrs == index.neighbors[0]);
 
-        let nbrs = index.get_nbrs(&pg, 0.0, 1.0, 1);
-        println!("{} {}: {:?}", 1.0, 0.0, nbrs);
+        let nbrs = index.get_nbrs(&pg, -5.0, -4.0, 1);
+        println!("{} {}: {:?}", -5.0, -4.0, nbrs);
         assert!(nbrs.len() == 6);
         assert!(nbrs == vec![0, 1, 10, 11, 20, 21]);
 
-        let nbrs = index.get_nbrs(&pg, 1.0, 0.0, 1);
-        println!("{} {}: {:?}", 1.0, 0.0, nbrs);
+        let nbrs = index.get_nbrs(&pg, -4.0, -5.0, 1);
+        println!("{} {}: {:?}", -4.0, -5.0, nbrs);
         assert!(nbrs.len() == 6);
         assert!(nbrs == vec![0, 1, 2, 10, 11, 12]);
 
-        let nbrs = index.get_nbrs(&pg, 1.0, 1.0, 1);
-        println!("{} {}: {:?}", 1.0, 0.0, nbrs);
+        let nbrs = index.get_nbrs(&pg, -4.0, -4.0, 1);
+        println!("{} {}: {:?}", -4.0, -4.0, nbrs);
         assert!(nbrs.len() == 9);
         assert!(nbrs == vec![0, 1, 2, 10, 11, 12, 20, 21, 22]);
 
         // now, move one of the particles to the middle
-        pdata.x[0] = (5.5, 5.5);
+        pdata.x[0] = (0.5, 0.5);
         index.update(&pg, &pdata.x);
-        let nbrs = index.get_nbrs(&pg, 5.0, 5.0, 1);
+        index.update_neighbors(&pg, &pdata.x, 1);
+
+        let nbrs = index.get_nbrs(&pg, 0.5, 0.5, 1);
         assert!(nbrs.len() == 10);
-        println!("{} {}: {:?}", 5.0, 5.0, nbrs);
+        println!("{} {}: {:?}", 0.5, 0.5, nbrs);
         assert!(nbrs.contains(&0));
 
-        let nbrs = index.get_nbrs(&pg, 6.5, 6.5, 1);
+        let nbrs = index.get_nbrs(&pg, 1.5, 1.5, 1);
         assert!(nbrs.len() == 10);
-        println!("{} {}: {:?}", 6.5, 6.5, nbrs);
+        println!("{} {}: {:?}", 1.5, 1.5, nbrs);
         assert!(nbrs.contains(&0));
 
 

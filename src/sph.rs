@@ -101,6 +101,11 @@ pub fn update_densities_ecs(
     h: f32
 ) {
     for i in 0..n_particles {
+        // println!("{:?}", x[i]);
+        // println!("{:?}", mass[i]);
+        // println!("{:?}", density[i]);
+        // println!("{:?}", neighbors[i]);
+
         assert!(!x[i].0.is_nan());
         assert!(!x[i].1.is_nan());
         density[i] = 0.0;
