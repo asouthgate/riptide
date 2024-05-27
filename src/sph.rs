@@ -295,6 +295,7 @@ pub fn leapfrog_cal_forces_ecs(
 
     let max_dist = h * 1.0;
     pindex.update(pg, &pdata.x);
+    let t1_2 = Instant::now();
     pindex.update_neighbors(pg, &pdata.x, max_dist as i32);
     let t1 = Instant::now();
 
@@ -331,7 +332,7 @@ pub fn leapfrog_cal_forces_ecs(
         particle_constants.body_force
     );
     let t3 = Instant::now();
-    println!("\t\t cal forces: {:?}, updates {:?}, nbrs {:?}", t3-t2, t2-t1, t1-t0);
+    println!("\t\t cal forces: {:?}, updates {:?}, pindex_update {:?} update_nbrs {:?}", t3-t2, t2-t1, t1_2-t0, t1-t1_2);
 
 }
 
