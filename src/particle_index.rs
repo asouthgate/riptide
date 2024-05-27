@@ -97,9 +97,13 @@ impl ParticleIndex {
                 // println!("{:?} -> {:?} -> {:?}", (wx, wy), (wxt, wyt), (x, y));
                 let ak = pg.xy2ak(x, y);
                 let start = self.ak2start[ak];
-                let end = self.ak2end[ak];
                 // println!("({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end);
-                result[idx] = &self.start2neighbors[start..end];
+                if start >= self.start2neighbors.len() {
+                    result[idx] = &[];
+                } else {
+                    let end = self.ak2end[ak];
+                    result[idx] = &self.start2neighbors[start..end];
+                }
                 idx += 1;
             }
         }
@@ -215,6 +219,16 @@ mod tests {
         }
         assert!(res.len() == nbrs.len());
 
+        // Check that nine_slice works for edges
+        let slices = index.get_nbrs_nine_slice(&pg, -5.0, -5.0);
+        let mut res = vec![];
+        for (i, slice) in slices.iter().enumerate() {
+            for &ind in *slice {
+                res.push(ind);
+            }
+        }
+        println!("{:?}", res);
+        assert!(res == vec![1, 10, 11]); // 1 was moved
 
     }
 

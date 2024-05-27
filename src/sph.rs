@@ -135,12 +135,13 @@ pub fn update_forces_ecs(
     density: &Vec<f32>, 
     mass: &Vec<f32>, 
     particle_type: &Vec<usize>,
-    neighbors: &Vec<Vec<usize>>,
+    pindex: &ParticleIndex,
     n_fluid_particles: usize,
     h: f32,
     mu_mat: &Vec<Vec<f32>>,
     s_mat: &Vec<Vec<f32>>,
-    body_force: (f32, f32)
+    body_force: (f32, f32),
+    pg: &PixelGrid,
 ) {
 
     let nthread = 12;
@@ -175,50 +176,53 @@ pub fn update_forces_ecs(
                     let mut ftot = (0.0, 0.0);
                     let mut f_viscous_tot = (0.0, 0.0);
                     let mut f_surface_tot = (0.0, 0.0);
-                    for _nbrj in neighbors[i].iter() {
-                        let nbrj = *_nbrj;
-                        if nbrj == i {
-                            continue;
-                        }
-                        let dx = x[i].0 - x[nbrj].0;
-                        let dy = x[i].1 - x[nbrj].1;
-                        assert!(!dx.is_nan());
-                        assert!(!dy.is_nan());
-                        assert!(dx.powi(2) + dy.powi(2) > 0.0);
-                        let grad = debrun_spiky_kernel_grad(dx, dy, h);
-                        assert!(!grad.0.is_nan());
-                        assert!(!grad.1.is_nan());
-                        assert!(density[i] != 0.0);
-                        assert!(density[nbrj] != 0.0);
-                        let fij = cal_pressure_force_ij(
-                            pressure[i],
-                            pressure[nbrj],
-                            density[i],
-                            density[nbrj],
-                            mass[nbrj],
-                            grad
-                        );
-                        ftot.0 += fij.0;
-                        ftot.1 += fij.1;
-                        assert!(!fij.0.is_nan());
-                        assert!(!fij.1.is_nan());
-                        let r2 = dx.powi(2) + dy.powi(2);
-                        let r = r2.powf(0.5);
-                        let du = v[i].0 - v[nbrj].0;
-                        let dv = v[i].1 - v[nbrj].1;
-                        let muij = mu_mat[particle_type[i]][particle_type[nbrj]];
-                        let a = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
-                        let b = (grad.0 * du) + (grad.1 * dv);
-                        let c = (dx / r2, dy / r2);
 
-                        if r < h {
-                            let s = s_mat[particle_type[i]][particle_type[nbrj]];
-                            f_surface_tot.0 += s * (c_s * r).cos() * dx / r;
-                            f_surface_tot.1 += s * (c_s * r).cos() * dy / r;
-                        }
+                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
+                    for (slicei, slice) in slices.iter().enumerate() {
+                        for &nbrj in *slice {
+                            if nbrj == i {
+                                continue;
+                            }
+                            let dx = x[i].0 - x[nbrj].0;
+                            let dy = x[i].1 - x[nbrj].1;
+                            assert!(!dx.is_nan());
+                            assert!(!dy.is_nan());
+                            assert!(dx.powi(2) + dy.powi(2) > 0.0);
+                            let grad = debrun_spiky_kernel_grad(dx, dy, h);
+                            assert!(!grad.0.is_nan());
+                            assert!(!grad.1.is_nan());
+                            assert!(density[i] != 0.0);
+                            assert!(density[nbrj] != 0.0);
+                            let fij = cal_pressure_force_ij(
+                                pressure[i],
+                                pressure[nbrj],
+                                density[i],
+                                density[nbrj],
+                                mass[nbrj],
+                                grad
+                            );
+                            ftot.0 += fij.0;
+                            ftot.1 += fij.1;
+                            assert!(!fij.0.is_nan());
+                            assert!(!fij.1.is_nan());
+                            let r2 = dx.powi(2) + dy.powi(2);
+                            let r = r2.powf(0.5);
+                            let du = v[i].0 - v[nbrj].0;
+                            let dv = v[i].1 - v[nbrj].1;
+                            let muij = mu_mat[particle_type[i]][particle_type[nbrj]];
+                            let a = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
+                            let b = (grad.0 * du) + (grad.1 * dv);
+                            let c = (dx / r2, dy / r2);
 
-                        f_viscous_tot.0 += muij * a * b * c.0;
-                        f_viscous_tot.1 += muij * a * b * c.1;
+                            if r < h {
+                                let s = s_mat[particle_type[i]][particle_type[nbrj]];
+                                f_surface_tot.0 += s * (c_s * r).cos() * dx / r;
+                                f_surface_tot.1 += s * (c_s * r).cos() * dy / r;
+                            }
+
+                            f_viscous_tot.0 += muij * a * b * c.0;
+                            f_viscous_tot.1 += muij * a * b * c.1;
+                        }
                     }
                     f_pressure[chunk_i] = ftot;
                     f_viscous[chunk_i] = f_viscous_tot;
@@ -324,12 +328,13 @@ pub fn leapfrog_cal_forces_ecs(
         &pdata_new.density,
         &pdata.mass,
         &pdata.particle_type,
-        &pindex.neighbors,
+        &pindex,
         pdata.n_fluid_particles,
         h, 
         &particle_constants.mu_mat,
         &particle_constants.s_mat,
-        particle_constants.body_force
+        particle_constants.body_force,
+        pg
     );
     let t3 = Instant::now();
     println!("\t\t cal forces: {:?}, updates {:?}, pindex_update {:?} update_nbrs {:?}", t3-t2, t2-t1, t1_2-t0, t1-t1_2);
