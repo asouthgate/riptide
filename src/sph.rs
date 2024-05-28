@@ -29,6 +29,7 @@ pub struct ParticleConstants {
     pub mu_mat: Vec<Vec<f32>>, // viscosity
     pub s_mat: Vec<Vec<f32>>, // surface tension
     pub body_force: (f32, f32), // e.g. gravity
+    pub gamma: f32 // exponential for pressure
 }
 
 
@@ -59,6 +60,12 @@ fn cal_pressure(rho: f32, rho0: f32, k: f32) -> f32 {
     k * (rho - rho0)
 }
 
+fn cal_pressure_wcsph(rho: f32, rho0: f32, c2: f32, gamma: f32) -> f32 {
+    // TODO: inefficient
+    let bweak = (c2 * rho0 / gamma as f32);
+    let result = bweak * ((rho/rho0).powf(gamma) - 1.0);
+    result
+}
 
 /// Calculate the jth density contribution for particle i.
 fn cal_rho_ij(mass_j: f32, dist_ij: f32, h: f32) -> f32 {
@@ -115,6 +122,7 @@ pub fn update_densities_ecs(
                 assert!(!density[i].is_nan());
             }
         }
+        assert!(density[i] > 0.0);
     }
 }
 
@@ -242,11 +250,13 @@ pub fn update_pressures_ecs(
     particle_type: &Vec<usize>,
     n_particles: usize,
     rho0_vec: &Vec<f32>, 
-    c2_vec: &Vec<f32>
+    c2_vec: &Vec<f32>,
+    gamma: f32
 ) {
     for k in 0..n_particles {
         let pk = particle_type[k];
-        pressure[k] = cal_pressure(density[k], rho0_vec[pk], c2_vec[pk]);
+        // pressure[k] = cal_pressure(density[k], rho0_vec[pk], c2_vec[pk]);
+        pressure[k] = cal_pressure_wcsph(density[k], rho0_vec[pk], c2_vec[pk], 7.0);
     }
 }
 
@@ -313,7 +323,8 @@ pub fn leapfrog_cal_forces_ecs(
         &pdata.particle_type,
         pdata.n_particles,
         &particle_constants.rho0_vec, 
-        &particle_constants.c2_vec
+        &particle_constants.c2_vec,
+        particle_constants.gamma
     );
     let t2 = Instant::now();
 
@@ -375,19 +386,72 @@ pub fn leapfrog_ecs(
     let t2 = Instant::now();
 
     leapfrog_update_acceleration_ecs(pdata_new);
+
     let t3 = Instant::now();
 
-    let mut maxvsq: f32 = 0.0;
+    // let mut maxp_over_rho: f32 = 0.0; // we need a minimum value otherwise timestep goes to infinity
+    // let mut vmax: f32 = 0.0;
+    // for k in 0..pdata_new.n_fluid_particles {
+    //     maxp_over_rho = maxp_over_rho.max(
+    //         (pdata.pressure[k] / pdata.density[k]).abs()
+    //     );
+    //     println!("??? {} {:?}", pdata.pressure[k], (pdata.pressure[k] / pdata.density[k]).abs());
+    //     vmax = vmax.max(pdata_new.v[k].0.powi(2) + pdata_new.v[k].1.powi(2));
+    // }
+    // vmax = vmax.powf(0.5);
+    // let cmax = particle_constants.c2_vec[0].max(particle_constants.c2_vec[1]).powf(0.5);
+    // let rho0_max = particle_constants.rho0_vec[0].max(particle_constants.rho0_vec[1]).powf(0.5);
+    // let mumax = (particle_constants.mu_mat[0][0].max(particle_constants.mu_mat[1][1]));
+    // let ceffective = (maxp_over_rho * particle_constants.gamma * rho0_max).powf(0.5) / cmax;
+    // assert!(ceffective + vmax > 0.0);
+
+    // let dt_new = cal_dt(0.4, 0.4, h, cmax, vmax, mumax); 
+
+    let eps = 0.2;
+    let mut dt_new: f32 = 100000.0;
+    for k in 0..pdata_new.n_fluid_particles {
+        // let dx = ( 
+        //     pdata_new.v[k].0 * dt + pdata_new.a[k].0 * dt.powi(2),
+        //     pdata_new.v[k].1 * dt + pdata_new.a[k].1 * dt.powi(2)
+        // );
+        // if < h, we need
+        let vkx = pdata_new.v[k].0.abs();
+        let vky = pdata_new.v[k].1.abs();
+        let akx = pdata_new.a[k].0.abs();
+        let aky = pdata_new.a[k].1.abs();
+        let mut dtkx: f32;
+        let mut dtky: f32;
+        if akx > 0.000001 {
+            dtkx = (- vkx + (vkx.powi(2) + 4.0 * akx * h).powf(0.5) ) / ( 2.0 * akx );
+        } else {
+            dtkx = h / vkx;
+        }
+        if aky > 0.000001 {
+            // println!("{}", (vky.powi(2) + 4.0 * aky * h).powf(0.5) );
+            dtky = ( - vky + (vky.powi(2) + 4.0 * aky * h).powf(0.5) ) / ( 2.0 * aky );
+        } else {
+            dtky = h / vky;
+        }
+        // println!("{} {} | {} {} | {} {}", vkx, vky, akx, aky, dtkx, dtky);
+        dt_new = dt_new.min(dtkx).min(dtky);
+        assert!(dt_new > 0.0);
+    }
+    dt_new = eps * dt_new;
+    // let dt_new = 0.2 * (h / (1.0 + 100.0 * maxd)).max(0.0000005);
+    assert!(dt_new < 1000000.0);
+    // assert!(maxd/dt_new < h);
+
+    let t4 = Instant::now();
+
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
-            pdata_new.v[k].0 + pdata_new.a[k].0 * dt / 2.0,
-            pdata_new.v[k].1 + pdata_new.a[k].1 * dt / 2.0
+            pdata_new.v[k].0 + pdata_new.a[k].0 * dt_new / 2.0,
+            pdata_new.v[k].1 + pdata_new.a[k].1 * dt_new / 2.0
         );
-        maxvsq = maxvsq.max(pdata_new.v[k].0.powi(2) + pdata_new.v[k].1.powi(2));
     }  
-    let t4 = Instant::now();
-    println!("\t v1: {:?}, acc {:?}, forces {:?}, v2 {:?}", t4-t3, t3-t2, t2-t1, t1-t0);
-    maxvsq.powf(0.5)
+    let t5 = Instant::now();
+    println!("\t v1: {:?}, cal_dt {:?}, acc {:?} forces {:?}, v1/2 {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
+    dt_new
 }
 
 
