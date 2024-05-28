@@ -49,6 +49,16 @@ pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie
             mass: mass,
             .. Default::default()
         });
+        res.push(Particle{
+            position: (j0 as f32 - pg.dx / 10.0, i as f32 + pg.dy / 2.0),
+            mass: mass,
+            .. Default::default()
+        });
+        res.push(Particle{
+            position: (je as f32 + pg.dx / 10.0, i as f32 + pg.dy / 2.0),
+            mass: mass,
+            .. Default::default()
+        });
     }
     for j in j0+1..je-1 {
         let (x, y) = pg.worldxy2xy(j as f32, i0 as f32);
@@ -67,7 +77,27 @@ pub fn get_ghost_box(fs: &mut FluidState, pg: &PixelGrid, mass: f32, i0: i32, ie
             mass: mass,
             .. Default::default()
         });
+        res.push(Particle{
+            position: (j as f32 + pg.dx / 2.0, i0 as f32 - pg.dy / 10.0),
+            mass: mass,
+            .. Default::default()
+        });
+        res.push(Particle{
+            position: (j as f32 + pg.dx / 2.0, ie as f32 + pg.dy / 10.0),
+            mass: mass,
+            .. Default::default()
+        });
     }
+    res.push(Particle{
+        position: (j0 as f32 + pg.dx / 2.0, i0 as f32 - pg.dy / 10.0),
+        mass: mass,
+        .. Default::default()
+    });
+    res.push(Particle{
+        position: (je as f32 + pg.dx / 2.0, ie as f32 + pg.dy / 10.0),
+        mass: mass,
+        .. Default::default()
+    });
     res
 }
 

@@ -407,7 +407,7 @@ pub fn leapfrog_ecs(
 
     // let dt_new = cal_dt(0.4, 0.4, h, cmax, vmax, mumax); 
 
-    let eps = 0.2;
+    let eps = 0.3;
     let mut dt_new: f32 = 100000.0;
     for k in 0..pdata_new.n_fluid_particles {
         // let dx = ( 
@@ -421,12 +421,12 @@ pub fn leapfrog_ecs(
         let aky = pdata_new.a[k].1.abs();
         let mut dtkx: f32;
         let mut dtky: f32;
-        if akx > 0.000001 {
+        if akx > 0.00001 {
             dtkx = (- vkx + (vkx.powi(2) + 4.0 * akx * h).powf(0.5) ) / ( 2.0 * akx );
         } else {
             dtkx = h / vkx;
         }
-        if aky > 0.000001 {
+        if aky > 0.00001 {
             // println!("{}", (vky.powi(2) + 4.0 * aky * h).powf(0.5) );
             dtky = ( - vky + (vky.powi(2) + 4.0 * aky * h).powf(0.5) ) / ( 2.0 * aky );
         } else {
