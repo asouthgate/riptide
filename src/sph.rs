@@ -107,23 +107,39 @@ pub fn update_densities_ecs(
     n_particles: usize,
     h: f32,
     pg: &PixelGrid,
+    nthread: usize
 ) {
 
-    for i in 0..n_particles {
-        assert!(!x[i].0.is_nan());
-        assert!(!x[i].1.is_nan());
-        density[i] = 0.0;
-        let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
-        for (slicei, slice) in slices.iter().enumerate() {
-            for &j in *slice {
-                let rij = cal_dist(x[i], x[j]);
-                let contrib = cal_rho_ij(mass[j], rij, h);
-                density[i] += contrib; 
-                assert!(!density[i].is_nan());
-            }
+    let n_chunks = nthread.min(n_particles);
+    let chunk_size = n_particles / n_chunks;
+
+
+    crossbeam::scope(|s| {
+        for (i, density) in 
+            density[0..n_particles].chunks_mut(chunk_size)
+            .enumerate() 
+        {
+            let start = i * chunk_size;
+            s.spawn(move |_| {
+                for chunk_i in 0..density.len() { // ignore static particle
+                    let i = chunk_i + start;
+                    assert!(!x[i].0.is_nan());
+                    assert!(!x[i].1.is_nan());            
+                    density[chunk_i] = 0.0;
+                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
+                    for (slicei, slice) in slices.iter().enumerate() {
+                        for &j in *slice {
+                            let rij = cal_dist(x[i], x[j]);
+                            let contrib = cal_rho_ij(mass[j], rij, h);
+                            density[chunk_i] += contrib; 
+                            assert!(!density[chunk_i].is_nan());
+                        }            
+                    }
+                    assert!(density[chunk_i] > 0.0);
+                }
+            });
         }
-        assert!(density[i] > 0.0);
-    }
+    });
 }
 
 
@@ -150,9 +166,9 @@ pub fn update_forces_ecs(
     s_mat: &Vec<Vec<f32>>,
     body_force: (f32, f32),
     pg: &PixelGrid,
+    nthread: usize
 ) {
 
-    let nthread = 12;
     let n_chunks = nthread.min(n_fluid_particles);
     let chunk_size = n_fluid_particles / n_chunks;
 
@@ -302,20 +318,19 @@ pub fn leapfrog_cal_forces_ecs(
     pdata: &ParticleData,
     pdata_new: &mut ParticleData,
     particle_constants: &ParticleConstants,
-    h: f32
+    h: f32,
+    n_threads: usize
 ) {
 
     let t0 = Instant::now();
 
     let max_dist = h * 1.0;
     pindex.update(pg, &pdata_new.x); // should be new
-    let t1_2 = Instant::now();
-    // pindex.update_neighbors(pg, &pdata_new.x, 1);
     let t1 = Instant::now();
 
     // update forces
     update_densities_ecs(
-        &pdata_new.x, &pdata.mass, &mut pdata_new.density, pindex, pdata.n_particles, h, pg
+        &pdata_new.x, &pdata.mass, &mut pdata_new.density, pindex, pdata.n_particles, h, pg, n_threads
     );
     update_pressures_ecs(
         &mut pdata_new.pressure,
@@ -345,10 +360,11 @@ pub fn leapfrog_cal_forces_ecs(
         &particle_constants.mu_mat,
         &particle_constants.s_mat,
         particle_constants.body_force,
-        pg
+        pg,
+        n_threads
     );
     let t3 = Instant::now();
-    println!("\t\t cal forces: {:?}, updates {:?}, pindex_update {:?} update_nbrs {:?}", t3-t2, t2-t1, t1_2-t0, t1-t1_2);
+    println!("\t\t cal forces: {:?}, density updates {:?}, pindex_update {:?}", t3-t2, t2-t1, t1-t0);
 
 }
 
@@ -394,6 +410,7 @@ pub fn leapfrog_ecs(
     pdata_new: &mut ParticleData,
     particle_constants: &ParticleConstants, dt: f32,
     h: f32,
+    n_threads: usize,
 ) -> f32 {
 
     let dt_safety_factor = 0.4;
@@ -415,7 +432,7 @@ pub fn leapfrog_ecs(
     let t1 = Instant::now();
 
     leapfrog_cal_forces_ecs(
-        pg, index, pdata, pdata_new, particle_constants, h
+        pg, index, pdata, pdata_new, particle_constants, h, n_threads
     );
     let t2 = Instant::now();
 
