@@ -358,6 +358,35 @@ pub fn cal_dt(safety: f32, viscous_safety: f32, h: f32, cmax: f32, vmax: f32, mu
     a.min(b)
 }
 
+/// Compute a delta t by considering v and a of every particle
+///
+/// For a dt^2 + vdt = dx < h, we have to use the quadratic equation
+/// With some care with absolute values and zeros
+pub fn cal_dt_exhaustive(pdata: &ParticleData, h: f32, safety: f32) -> f32 {
+    let mut dt_new: f32 = 100000.0;
+    for k in 0..pdata.n_fluid_particles {
+        let vkx = pdata.v[k].0.abs();
+        let vky = pdata.v[k].1.abs();
+        let akx = pdata.a[k].0.abs();
+        let aky = pdata.a[k].1.abs();
+        let mut dtkx: f32;
+        let mut dtky: f32;
+        if akx > 0.00001 {
+            dtkx = (- vkx + (vkx.powi(2) + 4.0 * akx * h).powf(0.5) ) / ( 2.0 * akx );
+        } else {
+            dtkx = h / vkx;
+        }
+        if aky > 0.00001 {
+            dtky = ( - vky + (vky.powi(2) + 4.0 * aky * h).powf(0.5) ) / ( 2.0 * aky );
+        } else {
+            dtky = h / vky;
+        }
+        dt_new = dt_new.min(dtkx).min(dtky);
+        assert!(dt_new > 0.0);
+    }
+    safety * dt_new
+}
+
 
 pub fn leapfrog_ecs(
     pg: &PixelGrid, index: &mut ParticleIndex,
@@ -367,12 +396,17 @@ pub fn leapfrog_ecs(
     h: f32,
 ) -> f32 {
 
+    let dt_safety_factor = 0.4;
+
     let t0 = Instant::now();
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
             pdata.v[k].0 + pdata.a[k].0 * dt / 2.0,
             pdata.v[k].1 + pdata.a[k].1 * dt / 2.0
         );
+    }
+    let mut dt_new = cal_dt_exhaustive(pdata, h, dt_safety_factor);
+    for k in 0..pdata_new.n_fluid_particles {
         pdata_new.x[k] = (
             pdata.x[k].0 + dt * pdata_new.v[k].0,
             pdata.x[k].1 + dt * pdata_new.v[k].1
@@ -388,58 +422,8 @@ pub fn leapfrog_ecs(
     leapfrog_update_acceleration_ecs(pdata_new);
 
     let t3 = Instant::now();
-
-    // let mut maxp_over_rho: f32 = 0.0; // we need a minimum value otherwise timestep goes to infinity
-    // let mut vmax: f32 = 0.0;
-    // for k in 0..pdata_new.n_fluid_particles {
-    //     maxp_over_rho = maxp_over_rho.max(
-    //         (pdata.pressure[k] / pdata.density[k]).abs()
-    //     );
-    //     println!("??? {} {:?}", pdata.pressure[k], (pdata.pressure[k] / pdata.density[k]).abs());
-    //     vmax = vmax.max(pdata_new.v[k].0.powi(2) + pdata_new.v[k].1.powi(2));
-    // }
-    // vmax = vmax.powf(0.5);
-    // let cmax = particle_constants.c2_vec[0].max(particle_constants.c2_vec[1]).powf(0.5);
-    // let rho0_max = particle_constants.rho0_vec[0].max(particle_constants.rho0_vec[1]).powf(0.5);
-    // let mumax = (particle_constants.mu_mat[0][0].max(particle_constants.mu_mat[1][1]));
-    // let ceffective = (maxp_over_rho * particle_constants.gamma * rho0_max).powf(0.5) / cmax;
-    // assert!(ceffective + vmax > 0.0);
-
-    // let dt_new = cal_dt(0.4, 0.4, h, cmax, vmax, mumax); 
-
-    let eps = 0.3;
-    let mut dt_new: f32 = 100000.0;
-    for k in 0..pdata_new.n_fluid_particles {
-        // let dx = ( 
-        //     pdata_new.v[k].0 * dt + pdata_new.a[k].0 * dt.powi(2),
-        //     pdata_new.v[k].1 * dt + pdata_new.a[k].1 * dt.powi(2)
-        // );
-        // if < h, we need
-        let vkx = pdata_new.v[k].0.abs();
-        let vky = pdata_new.v[k].1.abs();
-        let akx = pdata_new.a[k].0.abs();
-        let aky = pdata_new.a[k].1.abs();
-        let mut dtkx: f32;
-        let mut dtky: f32;
-        if akx > 0.00001 {
-            dtkx = (- vkx + (vkx.powi(2) + 4.0 * akx * h).powf(0.5) ) / ( 2.0 * akx );
-        } else {
-            dtkx = h / vkx;
-        }
-        if aky > 0.00001 {
-            // println!("{}", (vky.powi(2) + 4.0 * aky * h).powf(0.5) );
-            dtky = ( - vky + (vky.powi(2) + 4.0 * aky * h).powf(0.5) ) / ( 2.0 * aky );
-        } else {
-            dtky = h / vky;
-        }
-        // println!("{} {} | {} {} | {} {}", vkx, vky, akx, aky, dtkx, dtky);
-        dt_new = dt_new.min(dtkx).min(dtky);
-        assert!(dt_new > 0.0);
-    }
-    dt_new = eps * dt_new;
-    // let dt_new = 0.2 * (h / (1.0 + 100.0 * maxd)).max(0.0000005);
+    dt_new = cal_dt_exhaustive(pdata_new, h, dt_safety_factor);
     assert!(dt_new < 1000000.0);
-    // assert!(maxd/dt_new < h);
 
     let t4 = Instant::now();
 
@@ -448,9 +432,10 @@ pub fn leapfrog_ecs(
             pdata_new.v[k].0 + pdata_new.a[k].0 * dt_new / 2.0,
             pdata_new.v[k].1 + pdata_new.a[k].1 * dt_new / 2.0
         );
-    }  
+    } 
     let t5 = Instant::now();
     println!("\t v1: {:?}, cal_dt {:?}, acc {:?} forces {:?}, v1/2 {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
+    dt_new = cal_dt_exhaustive(pdata_new, h, dt_safety_factor);
     dt_new
 }
 
