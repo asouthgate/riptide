@@ -411,9 +411,8 @@ pub fn leapfrog_ecs(
     particle_constants: &ParticleConstants, dt: f32,
     h: f32,
     n_threads: usize,
+    dt_safety_factor: f32
 ) -> f32 {
-
-    let dt_safety_factor = 0.4;
 
     let t0 = Instant::now();
     for k in 0..pdata_new.n_fluid_particles {
@@ -484,7 +483,7 @@ mod tests {
     #[test]
     fn test_2_particles() {
         let h: f32 = 2.0;
-        let dt = 0.1;
+        let mut dt = 0.0001;
         let mut pdata = ParticleData::new(2, 2);
         pdata.x[0] = (10.0, 10.0);
         pdata.x[1] = (10.5, 10.0);
@@ -494,7 +493,7 @@ mod tests {
         let mut prev_err = 99999.0;
 
         let pc = ParticleConstants {
-            rho0_vec: vec![1.0, 0.7],
+            rho0_vec: vec![0.9, 0.9],
             c2_vec: vec![3.4, 3.8],
             mu_mat: vec![
                 vec![2.5, 0.01], 
@@ -504,7 +503,8 @@ mod tests {
                 vec![1.0, 0.0], 
                 vec![0.0, 20.0]
             ],
-            body_force: (0.0, -0.9)
+            body_force: (0.0, -0.9),
+            gamma: 7.0
         };
 
         let mut pdata_new = pdata.clone();
@@ -516,13 +516,16 @@ mod tests {
         }
         println!("");
 
+        dt = cal_dt_exhaustive(&pdata, h, 0.01);
+
         leapfrog_cal_forces_ecs(
             &pg, &mut index,
             &pdata,
             &mut pdata_new,
-            &pc, h
+            &pc, h, 2
         );
         leapfrog_update_acceleration_ecs(&mut pdata_new);
+        dt = cal_dt_exhaustive(&pdata_new, h, 0.01);
 
         println!("INIT LOOP");
 
@@ -535,13 +538,19 @@ mod tests {
 
         for _ in 0..20 {
             
-            leapfrog_ecs(
+            dt = leapfrog_ecs(
                 &pg, &mut index,
                 &pdata, &mut pdata_new,
-                &pc, dt, h
+                &pc, dt, h, 5, 0.1
             );  
             
             let mut new_err = 0.0;
+
+            for pi in 0..pdata.n_particles {
+                println!("{}", pi);
+                _debug_print_ecs(pdata.get_particle_ref(pi));   
+                _debug_print_ecs(pdata_new.get_particle_ref(pi));   
+            }
 
             for pi in 0..pdata_new.n_fluid_particles {
                 let rho0 = pc.rho0_vec[pdata_new.particle_type[pi]];
