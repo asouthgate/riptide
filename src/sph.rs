@@ -173,8 +173,6 @@ pub fn update_forces_ecs(
     let n_chunks = nthread.min(n_fluid_particles);
     let chunk_size = n_fluid_particles / n_chunks;
 
-    let t0 = Instant::now();
-
     crossbeam::scope(|s| {
         for (i, (((f_pressure, f_viscous), f_surface), f_body)) in 
             f_pressure[0..n_fluid_particles].chunks_mut(chunk_size)
@@ -256,8 +254,6 @@ pub fn update_forces_ecs(
             });
         }
     }).unwrap();
-    let t1 = Instant::now();
-    println!("pressure_viscous {:?}", t1-t0);
 }
 
 
