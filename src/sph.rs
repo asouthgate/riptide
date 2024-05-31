@@ -56,13 +56,14 @@ fn _debug_print_ecs(p: ParticleRef) {
 /// * `rho` - Density
 /// * `rho0` - Density at rest
 /// * `k` - Either speed of sound squared, or something else
+#[allow(dead_code)]
 fn cal_pressure(rho: f32, rho0: f32, k: f32) -> f32 {
     k * (rho - rho0)
 }
 
 fn cal_pressure_wcsph(rho: f32, rho0: f32, c2: f32, gamma: f32) -> f32 {
-    // TODO: inefficient
-    let bweak = (c2 * rho0 / gamma as f32);
+    // TODO: inefficient; bweak is const
+    let bweak = c2 * rho0 / gamma;
     let result = bweak * ((rho/rho0).powf(gamma) - 1.0);
     result
 }
@@ -114,7 +115,7 @@ pub fn update_densities_ecs(
     let chunk_size = n_particles / n_chunks;
 
 
-    crossbeam::scope(|s| {
+    let _ = crossbeam::scope(|s| {
         for (i, density) in 
             density[0..n_particles].chunks_mut(chunk_size)
             .enumerate() 
@@ -127,7 +128,7 @@ pub fn update_densities_ecs(
                     assert!(!x[i].1.is_nan());            
                     density[chunk_i] = 0.0;
                     let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
-                    for (slicei, slice) in slices.iter().enumerate() {
+                    for slice in slices.iter() {
                         for &j in *slice {
                             let rij = cal_dist(x[i], x[j]);
                             let contrib = cal_rho_ij(mass[j], rij, h);
@@ -202,7 +203,7 @@ pub fn update_forces_ecs(
                     let mut f_surface_tot = (0.0, 0.0);
 
                     let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
-                    for (slicei, slice) in slices.iter().enumerate() {
+                    for slice in slices.iter() {
                         for &nbrj in *slice {
                             if nbrj == i {
                                 continue;
@@ -267,7 +268,6 @@ pub fn update_pressures_ecs(
     n_particles: usize,
     rho0_vec: &Vec<f32>, 
     c2_vec: &Vec<f32>,
-    gamma: f32
 ) {
     for k in 0..n_particles {
         let pk = particle_type[k];
@@ -324,7 +324,6 @@ pub fn leapfrog_cal_forces_ecs(
 
     let t0 = Instant::now();
 
-    let max_dist = h * 1.0;
     pindex.update(pg, &pdata_new.x); // should be new
     let t1 = Instant::now();
 
@@ -339,7 +338,6 @@ pub fn leapfrog_cal_forces_ecs(
         pdata.n_particles,
         &particle_constants.rho0_vec, 
         &particle_constants.c2_vec,
-        particle_constants.gamma
     );
     let t2 = Instant::now();
 
@@ -385,8 +383,8 @@ pub fn cal_dt_exhaustive(pdata: &ParticleData, h: f32, safety: f32) -> f32 {
         let vky = pdata.v[k].1.abs();
         let akx = pdata.a[k].0.abs();
         let aky = pdata.a[k].1.abs();
-        let mut dtkx: f32;
-        let mut dtky: f32;
+        let dtkx: f32;
+        let dtky: f32;
         if akx > 0.00001 {
             dtkx = (- vkx + (vkx.powi(2) + 4.0 * akx * h).powf(0.5) ) / ( 2.0 * akx );
         } else {
@@ -424,8 +422,8 @@ pub fn leapfrog_ecs(
     let mut dt_new = cal_dt_exhaustive(pdata, h, dt_safety_factor);
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.x[k] = (
-            pdata.x[k].0 + dt * pdata_new.v[k].0,
-            pdata.x[k].1 + dt * pdata_new.v[k].1
+            pdata.x[k].0 + dt_new * pdata_new.v[k].0,
+            pdata.x[k].1 + dt_new * pdata_new.v[k].1
         );
     }  
     let t1 = Instant::now();
@@ -483,7 +481,7 @@ mod tests {
     #[test]
     fn test_2_particles() {
         let h: f32 = 2.0;
-        let mut dt = 0.0001;
+        let mut dt: f32;
         let mut pdata = ParticleData::new(2, 2);
         pdata.x[0] = (10.0, 10.0);
         pdata.x[1] = (10.5, 10.0);
@@ -515,8 +513,6 @@ mod tests {
             _debug_print_ecs(pdata_new.get_particle_ref(pi));   
         }
         println!("");
-
-        dt = cal_dt_exhaustive(&pdata, h, 0.01);
 
         leapfrog_cal_forces_ecs(
             &pg, &mut index,

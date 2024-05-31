@@ -1,7 +1,4 @@
 use crate::pixelgrid::PixelGrid;
-use crate::particle::Particle;
-use crate::particle_ecs::*;
-use std::sync::Arc;
 
 pub struct ParticleIndex {
     start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
@@ -53,59 +50,47 @@ impl ParticleIndex {
             }
         }
 
-        // let piarr: Vec<usize> = (0..pi2ak.len()).collect();
-        // println!("{:?}", piarr);
-        // println!("{:?}", pi2ak);
-        // println!("{:?}", pi2ak_sorted);
-        // println!("{:?}", self.ak2start);
-        // println!("{:?}", self.ak2end);
     }
+    // TODO: deprecated
     pub fn get_nbrs(&self, pg: &PixelGrid, wx: f32, wy: f32, dist: i32) -> Vec<usize> {
         let mut result = vec![];
         for dj in -dist..dist+1 {
             for di in -dist..dist+1 {
                 let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
-                if (wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h) {
+                if wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h {
                     continue;
                 }
 
                 let (x, y) = pg.worldxy2xy(wxt, wyt);
-                // println!("{:?} -> {:?} -> {:?}", (wx, wy), (wxt, wyt), (x, y));
                 let ak = pg.xy2ak(x, y);
                 let start = self.ak2start[ak];
                 let end = self.ak2end[ak];
-                // println!("({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end);
                 for k in start..end {
                     let nbrj = self.start2neighbors[k];
                     result.push(nbrj);
                 }
-                // println!("\t\t({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {} -> {:?}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end, result);
             }
         }
         result
     }
     pub fn get_nbrs_nine_slice<'a>(&'a self, pg: &PixelGrid, wx: f32, wy: f32) -> [&'a [usize]; 9] {
-        // println!("\tGetting nbrs at {} {}", wx, wy);
         let mut result: [&[usize]; 9] = [&[]; 9];
         let mut idx = 0;
         for dj in -1..=1 {
             for di in -1..=1 {
                 let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
-                if (wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h) {
+                if wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h {
                     continue;
                 }
 
                 let (x, y) = pg.worldxy2xy(wxt, wyt);
                 let ak = pg.xy2ak(x, y);
-                // println!("{:?} -> {:?} -> {:?} -> {}", (wx, wy), (wxt, wyt), (x, y), ak);
                 let start = self.ak2start[ak];
                 if start >= self.start2neighbors.len() {
-                    // println!("\t\t({} {}) -> ({} {}) -> ({} {}) -> {} -> {} EMPTY", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start);
                     result[idx] = &[];
                 } else {
                     let end = self.ak2end[ak];
                     result[idx] = &self.start2neighbors[start..end];
-                    // println!("\t\t({} {}) -> ({} {}) -> ({} {}) -> {} -> {} -> {} -> {:?}", wx, wy, wx + di as f32, wy + dj as f32, x, y, ak, start, end, result[idx]);
                 }
                 idx += 1;
             }
@@ -115,7 +100,7 @@ impl ParticleIndex {
     pub fn update_neighbors(&mut self, pg: &PixelGrid, x: &Vec<(f32, f32)>, dist: i32) {
         for pi in 0..x.len() {
             self.neighbors[pi].clear();
-            let mut nbrs = self.get_nbrs(pg, x[pi].0, x[pi].1, dist);
+            let nbrs = self.get_nbrs(pg, x[pi].0, x[pi].1, dist);
             self.neighbors[pi] = nbrs;
         }
     }
@@ -125,9 +110,9 @@ impl ParticleIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::particle_ecs::*;
 
-
-#[test]
+    #[test]
     fn test_particle_index_count() {
         let pg = PixelGrid::new(4, 4);
         let n_particles = pg.n * pg.m;
@@ -214,7 +199,7 @@ mod tests {
         // Check that nine_slice does the same thing.
         let slices = index.get_nbrs_nine_slice(&pg, 1.5, 1.5);
         let mut res = vec![];
-        for (i, slice) in slices.iter().enumerate() {
+        for slice in slices.iter() {
             for &ind in *slice {
                 res.push(ind);
                 assert!(nbrs.contains(&ind));
@@ -225,7 +210,7 @@ mod tests {
         // Check that nine_slice works for edges
         let slices = index.get_nbrs_nine_slice(&pg, -5.0, -5.0);
         let mut res = vec![];
-        for (i, slice) in slices.iter().enumerate() {
+        for slice in slices.iter() {
             for &ind in *slice {
                 res.push(ind);
             }
