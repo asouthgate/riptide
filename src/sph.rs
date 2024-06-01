@@ -114,7 +114,6 @@ pub fn update_densities_ecs(
     let n_chunks = nthread.min(n_particles);
     let chunk_size = n_particles / n_chunks;
 
-
     let _ = crossbeam::scope(|s| {
         for (i, density) in 
             density[0..n_particles].chunks_mut(chunk_size)
@@ -141,6 +140,8 @@ pub fn update_densities_ecs(
             });
         }
     });
+
+
 }
 
 
@@ -214,8 +215,10 @@ pub fn update_forces_ecs(
                             let grad = debrun_spiky_kernel_grad(dx, dy, h);
                             assert!(!grad.0.is_nan());
                             assert!(!grad.1.is_nan());
-                            assert!(density[i] != 0.0);
-                            assert!(density[nbrj] != 0.0);
+                            assert!(i < density.len());
+                            assert!(nbrj < density.len());
+                            assert!(density[i] > 0.0);
+                            assert!(density[nbrj] > 0.0);
                             let fij = cal_pressure_force_ij(
                                 pressure[i],
                                 pressure[nbrj],
@@ -368,45 +371,15 @@ pub fn cal_dt(safety: f32, viscous_safety: f32, h: f32, cmax: f32, vmax: f32, mu
     a.min(b)
 }
 
-/// Compute a delta t by considering v and a of every particle
-///
-/// For a dt^2 + vdt = dx < h, we have to use the quadratic equation
-/// With some care with absolute values and zeros
-pub fn cal_dt_exhaustive(pdata: &ParticleData, h: f32, safety: f32) -> f32 {
-    let mut dt_new: f32 = 100000.0;
-    for k in 0..pdata.n_fluid_particles {
-        let vkx = pdata.v[k].0.abs();
-        let vky = pdata.v[k].1.abs();
-        let akx = pdata.a[k].0.abs();
-        let aky = pdata.a[k].1.abs();
-        let dtkx: f32;
-        let dtky: f32;
-        if akx > 0.00001 {
-            dtkx = (- vkx + (vkx.powi(2) + 4.0 * akx * h).powf(0.5) ) / ( 2.0 * akx );
-        } else {
-            dtkx = h / vkx;
-        }
-        if aky > 0.00001 {
-            dtky = ( - vky + (vky.powi(2) + 4.0 * aky * h).powf(0.5) ) / ( 2.0 * aky );
-        } else {
-            dtky = h / vky;
-        }
-        dt_new = dt_new.min(dtkx).min(dtky);
-        assert!(dt_new > 0.0);
-    }
-    safety * dt_new
-}
-
-
 pub fn leapfrog_ecs(
     pg: &PixelGrid, index: &mut ParticleIndex,
     pdata: &ParticleData,
     pdata_new: &mut ParticleData,
-    particle_constants: &ParticleConstants, dt: f32,
+    particle_constants: &ParticleConstants, 
+    dt: f32,
     h: f32,
-    n_threads: usize,
-    dt_safety_factor: f32
-) -> f32 {
+    n_threads: usize
+) {
 
     let t0 = Instant::now();
     for k in 0..pdata_new.n_fluid_particles {
@@ -414,12 +387,11 @@ pub fn leapfrog_ecs(
             pdata.v[k].0 + pdata.a[k].0 * dt / 2.0,
             pdata.v[k].1 + pdata.a[k].1 * dt / 2.0
         );
-    }
-    let mut dt_new = cal_dt_exhaustive(pdata, h, dt_safety_factor);
-    for k in 0..pdata_new.n_fluid_particles {
+        // assert!(pdata_new.v[k].0.abs() < h/dt);
+        // assert!(pdata_new.v[k].1.abs() < h/dt);
         pdata_new.x[k] = (
-            pdata.x[k].0 + dt_new * pdata_new.v[k].0,
-            pdata.x[k].1 + dt_new * pdata_new.v[k].1
+            pdata.x[k].0 + dt * pdata_new.v[k].0,
+            pdata.x[k].1 + dt * pdata_new.v[k].1
         );
     }  
     let t1 = Instant::now();
@@ -430,23 +402,18 @@ pub fn leapfrog_ecs(
     let t2 = Instant::now();
 
     leapfrog_update_acceleration_ecs(pdata_new);
-
     let t3 = Instant::now();
-    dt_new = cal_dt_exhaustive(pdata_new, h, dt_safety_factor);
-    assert!(dt_new < 1000000.0);
 
     let t4 = Instant::now();
 
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] = (
-            pdata_new.v[k].0 + pdata_new.a[k].0 * dt_new / 2.0,
-            pdata_new.v[k].1 + pdata_new.a[k].1 * dt_new / 2.0
+            pdata_new.v[k].0 + pdata_new.a[k].0 * dt / 2.0,
+            pdata_new.v[k].1 + pdata_new.a[k].1 * dt / 2.0
         );
     } 
     let t5 = Instant::now();
     println!("\t v1: {:?}, cal_dt {:?}, acc {:?} forces {:?}, v1/2 {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
-    dt_new = cal_dt_exhaustive(pdata_new, h, dt_safety_factor);
-    dt_new
 }
 
 
