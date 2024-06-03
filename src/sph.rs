@@ -34,8 +34,8 @@ pub struct ParticleConstants<V: Vector<f32>> {
 
 
 fn _debug_print_ecs<V: Vector<f32> + std::fmt::Debug>(p: ParticleRef<V>) {
-    println!("x: {:?} a: {:?} mass: {:?} density {:?} body: {:?} drag: {:?} hydro: {:?} surface: {:?}", 
-        p.x, p.a, p.mass, p.density, p.f_body, p.f_viscous, p.f_pressure, p.f_surface
+    println!("x: {:?} v: {:?} a: {:?} mass: {:?} density {:?} body: {:?} drag: {:?} hydro: {:?} surface: {:?}", 
+        p.x, p.v, p.a, p.mass, p.density, p.f_body, p.f_viscous, p.f_pressure, p.f_surface
     );
 }
 
@@ -355,17 +355,6 @@ pub fn leapfrog_ecs<V: Vector<f32>>(
 
     let t0 = Instant::now();
     for k in 0..pdata_new.n_fluid_particles {
-        // pdata_new.v[k] = (
-        //     pdata.v[k].0 + pdata.a[k].0 * dt / 2.0,
-        //     pdata.v[k].1 + pdata.a[k].1 * dt / 2.0
-        // );
-        // // assert!(pdata_new.v[k].0.abs() < h/dt);
-        // // assert!(pdata_new.v[k].1.abs() < h/dt);
-        // pdata_new.x[k] = (
-        //     pdata.x[k].0 + dt * pdata_new.v[k].0,
-        //     pdata.x[k].1 + dt * pdata_new.v[k].1
-        // );
-
         pdata_new.v[k] = pdata.v[k] + pdata.a[k] * dt / 2.0;
         pdata_new.x[k] = pdata.x[k] + pdata_new.v[k] * dt;
     }  
@@ -383,10 +372,6 @@ pub fn leapfrog_ecs<V: Vector<f32>>(
 
     for k in 0..pdata_new.n_fluid_particles {
         pdata_new.v[k] += pdata_new.a[k] * dt / 2.0;
-        // pdata_new.v[k] = (
-        //     pdata_new.v[k].0 + pdata_new.a[k].0 * dt / 2.0,
-        //     pdata_new.v[k].1 + pdata_new.a[k].1 * dt / 2.0
-        // );
     } 
     let t5 = Instant::now();
     println!("\t v1: {:?}, cal_dt {:?}, acc {:?} forces {:?}, v1/2 {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
@@ -421,28 +406,28 @@ mod tests {
 
     #[test]
     fn test_2_particles() {
-        let h: f32 = 2.0;
-        let mut dt: f32 = 0.001;
+        let h: f32 = 1.0;
+        let dt: f32 = 0.001;
         let mut pdata = ParticleData::new(2, 2);
-        pdata.x[0] = Vector2::<f32>::new(10.0, 10.0);
-        pdata.x[1] = Vector2::<f32>::new(10.5, 10.0);
+        pdata.x[0] = Vector2::<f32>::new(9.6, 10.0);
+        pdata.x[1] = Vector2::<f32>::new(10.4, 10.0);
         let pg = PixelGrid::new(1000, 1000);
         let mut index = ParticleIndex::new(&pg, 2); 
         index.update(&pg, &pdata.x);
         let mut prev_err = 99999.0;
 
         let pc = ParticleConstants {
-            rho0_vec: vec![0.9, 0.9],
+            rho0_vec: vec![1.0, 1.0],
             c2_vec: vec![3.4, 3.8],
             mu_mat: vec![
                 vec![2.5, 0.01], 
                 vec![0.01, 3.0]
             ],
             s_mat: vec![
-                vec![1.0, 0.0], 
-                vec![0.0, 20.0]
+                vec![0.0, 0.0], 
+                vec![0.0, 0.0]
             ],
-            body_force: Vector2::<f32>::new(0.0, -0.9),
+            body_force: Vector2::<f32>::new(0.0, 0.0),
             gamma: 7.0
         };
 
@@ -450,6 +435,7 @@ mod tests {
         assert!(pdata_new.density == pdata.density);
 
         for pi in 0..pdata.n_particles {
+            println!("{}", pi);
             _debug_print_ecs(pdata.get_particle_ref(pi));   
             _debug_print_ecs(pdata_new.get_particle_ref(pi));   
         }
@@ -463,18 +449,18 @@ mod tests {
         );
         leapfrog_update_acceleration_ecs(&mut pdata_new);
 
-        println!("INIT LOOP");
-
         for pi in 0..pdata.n_particles {
             println!("{}", pi);
             _debug_print_ecs(pdata.get_particle_ref(pi));   
             _debug_print_ecs(pdata_new.get_particle_ref(pi));   
         }
         mem::swap(&mut pdata, &mut pdata_new);
+        println!("");
 
         for _ in 0..20 {
                         
             let mut new_err = 0.0;
+            println!("Starting loop");
 
             for pi in 0..pdata.n_particles {
                 println!("{}", pi);
@@ -482,12 +468,19 @@ mod tests {
                 _debug_print_ecs(pdata_new.get_particle_ref(pi));   
             }
 
+            leapfrog_ecs(
+                &pg, &mut index,
+                &pdata, &mut pdata_new,
+                &pc, dt, h, 16
+            );
+
+            println!("");
             for pi in 0..pdata_new.n_fluid_particles {
                 let rho0 = pc.rho0_vec[pdata_new.particle_type[pi]];
                 new_err += (pdata_new.density[pi] - rho0).abs()
             }    
+            println!("{} <= {}", new_err, prev_err);
             assert!(new_err <= prev_err);
-
             prev_err = new_err; 
 
             mem::swap(&mut pdata, &mut pdata_new);
