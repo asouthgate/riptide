@@ -11,3 +11,4 @@ pub mod rigid_body;
 pub mod pixelgrid;
 pub mod pressure;
 pub mod sph;
+pub mod vector;
