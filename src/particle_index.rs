@@ -1,4 +1,5 @@
 use crate::pixelgrid::PixelGrid;
+use crate::vector::Vector;
 
 pub struct ParticleIndex {
     start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
@@ -16,12 +17,12 @@ impl ParticleIndex {
             neighbors: vec![vec![]; n_particles]
         }
     }
-    pub fn update(&mut self, pg: &PixelGrid, x: &Vec<(f32, f32)>) {
+    pub fn update<V: Vector<f32>>(&mut self, pg: &PixelGrid, x: &Vec<V>) {
         let mut pi2ak = vec![0; x.len()];
         let mut pi2ak_sorted = vec![0; x.len()];
         self.start2neighbors = (0..pi2ak.len()).collect();
         for pi in 0..x.len() {
-            let (x, y) = pg.worldxy2xy(x[pi].0, x[pi].1);
+            let (x, y) = pg.worldxy2xy(x[pi][0], x[pi][1]);
             let ak = pg.xy2ak(x, y);
             pi2ak[pi] = ak;
         }
@@ -97,10 +98,10 @@ impl ParticleIndex {
         }
         result
     }
-    pub fn update_neighbors(&mut self, pg: &PixelGrid, x: &Vec<(f32, f32)>, dist: i32) {
+    pub fn update_neighbors<V: Vector<f32>>(&mut self, pg: &PixelGrid, x: &Vec<V>, dist: i32) {
         for pi in 0..x.len() {
             self.neighbors[pi].clear();
-            let nbrs = self.get_nbrs(pg, x[pi].0, x[pi].1, dist);
+            let nbrs = self.get_nbrs(pg, x[pi][0], x[pi][1], dist);
             self.neighbors[pi] = nbrs;
         }
     }
@@ -111,17 +112,18 @@ impl ParticleIndex {
 mod tests {
     use super::*;
     use crate::particle_ecs::*;
+    use cgmath::Vector2;
 
     #[test]
     fn test_particle_index_count() {
         let pg = PixelGrid::new(4, 4);
         let n_particles = pg.n * pg.m;
-        let mut pdata = ParticleData::new(n_particles, n_particles);
+        let mut pdata = ParticleData::<Vector2<f32>>::new(n_particles, n_particles);
 
         let mut pi = 0;
         for i in 0..pg.m {
             for j in 0..pg.n {
-                pdata.x[pi] = (j as f32, i as f32);
+                pdata.x[pi] = Vector2::<f32>::new(j as f32, i as f32);
                 pi += 1;
             }
         }
@@ -148,12 +150,12 @@ mod tests {
         let pg = PixelGrid::new_with_transform(10, 10, 1.0, 1.0, -5.0, -5.0);
 
         let n_particles = pg.n * pg.m;
-        let mut pdata = ParticleData::new(n_particles, n_particles);
+        let mut pdata = ParticleData::<Vector2<f32>>::new(n_particles, n_particles);
 
         // arrange the particles on a grid
         for i in 0..pg.m {
             for j in 0..pg.n {
-                pdata.x[i * pg.n + j] = (-5.0 + j as f32 + 0.5, -5.0 + i as f32 + 0.5);
+                pdata.x[i * pg.n + j] = Vector2::<f32>::new(-5.0 + j as f32 + 0.5, -5.0 + i as f32 + 0.5);
             }
         }
         let mut index = ParticleIndex::new(&pg, n_particles);
@@ -182,7 +184,7 @@ mod tests {
         assert!(nbrs == vec![0, 1, 2, 10, 11, 12, 20, 21, 22]);
 
         // now, move one of the particles to the middle
-        pdata.x[0] = (0.5, 0.5);
+        pdata.x[0] = Vector2::<f32>::new(0.5, 0.5);
         index.update(&pg, &pdata.x);
         index.update_neighbors(&pg, &pdata.x, 1);
 

@@ -274,23 +274,6 @@ pub fn leapfrog_update_acceleration_ecs<V: Vector<f32>>(
     pdata: &mut ParticleData<V>
 ) {
     for k in 0..pdata.n_fluid_particles {
-        // let ftotx = 
-        //       pdata.f_pressure[k].0 
-        //     + pdata.f_body[k].0
-        //     + pdata.f_surface[k].0
-        //     + pdata.f_viscous[k].0;
-
-        // let ftoty = 
-        //     pdata.f_pressure[k].1 
-        //     + pdata.f_body[k].1
-        //     + pdata.f_surface[k].1
-        //     + pdata.f_viscous[k].1;
-
-        // pdata.a[k] = (
-        //     (1.0 / pdata.density[k]) * ftotx,
-        //     (1.0 / pdata.density[k]) * ftoty
-        // );
-
         let ftot = 
             pdata.f_pressure[k] 
             + pdata.f_body[k]
@@ -383,8 +366,8 @@ pub fn leapfrog_ecs<V: Vector<f32>>(
         //     pdata.x[k].1 + dt * pdata_new.v[k].1
         // );
 
-        pdata_new.v[k] += pdata.a[k] * dt / 2.0;
-        pdata_new.x[k] += pdata_new.v[k] * dt;
+        pdata_new.v[k] = pdata.v[k] + pdata.a[k] * dt / 2.0;
+        pdata_new.x[k] = pdata.x[k] + pdata_new.v[k] * dt;
     }  
     let t1 = Instant::now();
 
