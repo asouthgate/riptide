@@ -1,16 +1,16 @@
-use crate::particle::{Particle};
 use crate::particle_ecs::*;
 use crate::pixelgrid::PixelGrid;
 use crate::particle_index::*;
 use crate::kernels::*;
 use std::time::Instant;
 
+use crate::vector::*;
 
 const PI: f32 = 3.141592653589793;
 
-fn cal_dist(x0: (f32, f32), x1: (f32, f32)) -> f32 {
-    ( (x0.0 - x1.0).powi(2) + (x0.1 - x1.1).powi(2) ).powf(0.5)
-}
+// fn cal_dist(x0: (f32, f32), x1: (f32, f32)) -> f32 {
+//     ( (x0.0 - x1.0).powi(2) + (x0.1 - x1.1).powi(2) ).powf(0.5)
+// }
 
 
 /// Representation of macroscopic fluid constants for particles.
@@ -23,24 +23,17 @@ fn cal_dist(x0: (f32, f32), x1: (f32, f32)) -> f32 {
 ///
 /// These structures are intentionally simple. We want easy conversion to GPU.
 /// They could be even simpler, and represented as arrays.
-pub struct ParticleConstants {
+pub struct ParticleConstants<V: Vector<f32>> {
     pub rho0_vec: Vec<f32>, // target density; hydrostatic force is zero at rho0
     pub c2_vec: Vec<f32>, // speed of sound squared
     pub mu_mat: Vec<Vec<f32>>, // viscosity
     pub s_mat: Vec<Vec<f32>>, // surface tension
-    pub body_force: (f32, f32), // e.g. gravity
+    pub body_force: V, // e.g. gravity
     pub gamma: f32 // exponential for pressure
 }
 
 
-fn _debug_print(p: &Particle) {
-    println!("x: {:?} a: {:?} mass: {:?} density {:?} body: {:?} drag: {:?} hydro: {:?} surface: {:?}", 
-        p.position, p.acceleration, p.mass, p.density, p.f_body, p.f_drag, p.f_hydro, p.f_surface
-    );
-}
-
-
-fn _debug_print_ecs(p: ParticleRef) {
+fn _debug_print_ecs<V: Vector<f32> + std::fmt::Debug>(p: ParticleRef<V>) {
     println!("x: {:?} a: {:?} mass: {:?} density {:?} body: {:?} drag: {:?} hydro: {:?} surface: {:?}", 
         p.x, p.a, p.mass, p.density, p.f_body, p.f_viscous, p.f_pressure, p.f_surface
     );
@@ -87,9 +80,9 @@ fn _cal_pressure_force_coefficient(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f
 /// * `rhoj` - density j
 /// * `mj` - mass j
 /// * `gradW` - gradient of the kernel function W(r, h)
-fn cal_pressure_force_ij(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32, gradw: (f32, f32)) -> (f32, f32) {
+fn cal_pressure_force_ij<V: Vector<f32>>(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32, gradw: V) -> V {
     let pforce_coefficient = - pi * _cal_pressure_force_coefficient(pi, pj, rhoi, rhoj, mj);
-    (pforce_coefficient * gradw.0, pforce_coefficient * gradw.1)
+    gradw * pforce_coefficient
 }
 
 // Update particle densities.
@@ -100,8 +93,8 @@ fn cal_pressure_force_ij(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32, gradw:
 /// * `particle_data`
 /// * `pindex`
 /// * `h` - characteristic length
-pub fn update_densities_ecs(
-    x: &Vec<(f32, f32)>,
+pub fn update_densities_ecs<V: Vector<f32>>(
+    x: &Vec<V>,
     mass: &Vec<f32>,
     density: &mut Vec<f32>,
     pindex: &ParticleIndex,
@@ -123,13 +116,13 @@ pub fn update_densities_ecs(
             s.spawn(move |_| {
                 for chunk_i in 0..density.len() { // ignore static particle
                     let i = chunk_i + start;
-                    assert!(!x[i].0.is_nan());
-                    assert!(!x[i].1.is_nan());            
+                    assert!(!x[i][0].is_nan());
+                    assert!(!x[i][1].is_nan());
                     density[chunk_i] = 0.0;
-                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
+                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i][0], x[i][1]);
                     for slice in slices.iter() {
                         for &j in *slice {
-                            let rij = cal_dist(x[i], x[j]);
+                            let rij = (x[i] - x[j]).magnitude();
                             let contrib = cal_rho_ij(mass[j], rij, h);
                             density[chunk_i] += contrib; 
                             assert!(!density[chunk_i].is_nan());
@@ -150,13 +143,13 @@ pub fn update_densities_ecs(
 /// * `particle_data`
 /// * `pindex`
 /// * `h` - characteristic length
-pub fn update_forces_ecs(
-    x: &Vec<(f32, f32)>, 
-    v: &Vec<(f32, f32)>,
-    f_pressure: &mut Vec<(f32, f32)>, 
-    f_viscous: &mut Vec<(f32, f32)>,
-    f_surface: &mut Vec<(f32, f32)>,
-    f_body: &mut Vec<(f32, f32)>,
+pub fn update_forces_ecs<V: Vector<f32>>(
+    x: &Vec<V>, // todo, just pass in struct and use fields
+    v: &Vec<V>,
+    f_pressure: &mut Vec<V>,
+    f_viscous: &mut Vec<V>,
+    f_surface: &mut Vec<V>,
+    f_body: &mut Vec<V>,
     pressure: &Vec<f32>, 
     density: &Vec<f32>, 
     mass: &Vec<f32>, 
@@ -166,7 +159,7 @@ pub fn update_forces_ecs(
     h: f32,
     mu_mat: &Vec<Vec<f32>>,
     s_mat: &Vec<Vec<f32>>,
-    body_force: (f32, f32),
+    body_force: V,
     pg: &PixelGrid,
     nthread: usize
 ) {
@@ -189,32 +182,36 @@ pub fn update_forces_ecs(
 
                 for chunk_i in 0..f_pressure.len() { // ignore static particle
                     let i = chunk_i + start;
-                    f_body[chunk_i] = (body_force.0 * density[i], body_force.1 * density[i]);
-                    assert!(!x[i].0.is_nan());
-                    assert!(!x[i].1.is_nan());
-                    assert!(!f_pressure[chunk_i].0.is_nan());
-                    assert!(!f_pressure[chunk_i].1.is_nan());
-                    f_pressure[chunk_i] = (0.0, 0.0);
-                    f_viscous[chunk_i] = (0.0, 0.0);
-                    f_surface[chunk_i] = (0.0, 0.0);
-                    let mut ftot = (0.0, 0.0);
-                    let mut f_viscous_tot = (0.0, 0.0);
-                    let mut f_surface_tot = (0.0, 0.0);
+                    f_body[chunk_i] = body_force * density[i];
+                    assert!(!x[i][0].is_nan());
+                    assert!(!x[i][1].is_nan());
+                    assert!(!f_pressure[chunk_i][0].is_nan());
+                    assert!(!f_pressure[chunk_i][1].is_nan());
 
-                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
+                    f_pressure[chunk_i] *= 0.0;
+                    f_viscous[chunk_i] *= 0.0;
+                    f_surface[chunk_i] *= 0.0;
+
+                    let mut f_pressure_tot = f_pressure[chunk_i].clone(); // why clone? no reference to dimensionality
+                    f_pressure_tot *= 0.0;
+                    let mut f_viscous_tot = f_pressure[chunk_i].clone();
+                    f_viscous_tot *= 0.0;
+                    let mut f_surface_tot = f_pressure[chunk_i].clone();
+                    f_surface_tot *= 0.0;
+
+                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i][0], x[i][1]); // this is not agnostic to dimensionality
                     for slice in slices.iter() {
                         for &nbrj in *slice {
                             if nbrj == i {
                                 continue;
                             }
-                            let dx = x[i].0 - x[nbrj].0;
-                            let dy = x[i].1 - x[nbrj].1;
-                            assert!(!dx.is_nan());
-                            assert!(!dy.is_nan());
-                            assert!(dx.powi(2) + dy.powi(2) > 0.0);
-                            let grad = debrun_spiky_kernel_grad(dx, dy, h);
-                            assert!(!grad.0.is_nan());
-                            assert!(!grad.1.is_nan());
+                            let dxy: V = x[i] - x[nbrj];
+                            assert!(!dxy[0].is_nan());
+                            assert!(!dxy[1].is_nan());
+                            assert!(dxy.magnitude() > 0.0);
+                            let grad = debrun_spiky_kernel_grad_vec(dxy, h);
+                            assert!(!grad[0].is_nan());
+                            assert!(!grad[1].is_nan());
                             assert!(i < density.len());
                             assert!(nbrj < density.len());
                             assert!(density[i] > 0.0);
@@ -227,30 +224,27 @@ pub fn update_forces_ecs(
                                 mass[nbrj],
                                 grad
                             );
-                            ftot.0 += fij.0;
-                            ftot.1 += fij.1;
-                            assert!(!fij.0.is_nan());
-                            assert!(!fij.1.is_nan());
-                            let r2 = dx.powi(2) + dy.powi(2);
-                            let r = r2.powf(0.5);
-                            let du = v[i].0 - v[nbrj].0;
-                            let dv = v[i].1 - v[nbrj].1;
-                            let muij = mu_mat[particle_type[i]][particle_type[nbrj]];
-                            let a = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
-                            let b = (grad.0 * du) + (grad.1 * dv);
-                            let c = (dx / r2, dy / r2);
+                            f_pressure_tot += fij;
+                            assert!(!fij[0].is_nan());
+                            assert!(!fij[1].is_nan());
+                            let r2 = dxy.dot(&dxy);
+                            let r = r2.sqrt();
+                            let duv = v[i] - v[nbrj];
+                            let muij: f32 = mu_mat[particle_type[i]][particle_type[nbrj]];
+                            let a: f32 = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
+                            let b: f32 = grad.dot(&duv);
+                            let c: V = dxy / r2;
 
                             if r < h {
                                 let s = s_mat[particle_type[i]][particle_type[nbrj]];
-                                f_surface_tot.0 += s * (c_s * r).cos() * dx / r;
-                                f_surface_tot.1 += s * (c_s * r).cos() * dy / r;
+                                let surfaceij = dxy * (s * (c_s * r).cos() / r);
+                                f_surface_tot += surfaceij;
                             }
-
-                            f_viscous_tot.0 += muij * a * b * c.0;
-                            f_viscous_tot.1 += muij * a * b * c.1;
+                            let viscousij = c * (muij * a * b);
+                            f_viscous_tot += viscousij;
                         }
                     }
-                    f_pressure[chunk_i] = ftot;
+                    f_pressure[chunk_i] = f_pressure_tot;
                     f_viscous[chunk_i] = f_viscous_tot;
                     f_surface[chunk_i] = f_surface_tot;
                 }
@@ -276,47 +270,42 @@ pub fn update_pressures_ecs(
 }
 
 
-pub fn update_body_forces_ecs(
-    f_body: &mut Vec<(f32, f32)>,
-    density: &Vec<f32>,
-    n_fluid_particles: usize,
-    body_force: (f32, f32)
-) {
-    for k in 0..n_fluid_particles {
-        f_body[k] = (body_force.0 * density[k], body_force.1 * density[k]);
-    }
-}
-
-
-pub fn leapfrog_update_acceleration_ecs(
-    pdata: &mut ParticleData
+pub fn leapfrog_update_acceleration_ecs<V: Vector<f32>>(
+    pdata: &mut ParticleData<V>
 ) {
     for k in 0..pdata.n_fluid_particles {
-        let ftotx = 
-              pdata.f_pressure[k].0 
-            + pdata.f_body[k].0
-            + pdata.f_surface[k].0
-            + pdata.f_viscous[k].0;
+        // let ftotx = 
+        //       pdata.f_pressure[k].0 
+        //     + pdata.f_body[k].0
+        //     + pdata.f_surface[k].0
+        //     + pdata.f_viscous[k].0;
 
-        let ftoty = 
-            pdata.f_pressure[k].1 
-            + pdata.f_body[k].1
-            + pdata.f_surface[k].1
-            + pdata.f_viscous[k].1;
+        // let ftoty = 
+        //     pdata.f_pressure[k].1 
+        //     + pdata.f_body[k].1
+        //     + pdata.f_surface[k].1
+        //     + pdata.f_viscous[k].1;
 
-        pdata.a[k] = (
-            (1.0 / pdata.density[k]) * ftotx,
-            (1.0 / pdata.density[k]) * ftoty
-        );
+        // pdata.a[k] = (
+        //     (1.0 / pdata.density[k]) * ftotx,
+        //     (1.0 / pdata.density[k]) * ftoty
+        // );
+
+        let ftot = 
+            pdata.f_pressure[k] 
+            + pdata.f_body[k]
+            + pdata.f_surface[k]
+            + pdata.f_viscous[k];
+        pdata.a[k] = ftot / pdata.density[k];
     }
 }
 
 
-pub fn leapfrog_cal_forces_ecs(
+pub fn leapfrog_cal_forces_ecs<V: Vector<f32>>(
     pg: &PixelGrid, pindex: &mut ParticleIndex,
-    pdata: &ParticleData,
-    pdata_new: &mut ParticleData,
-    particle_constants: &ParticleConstants,
+    pdata: &ParticleData<V>,
+    pdata_new: &mut ParticleData<V>,
+    particle_constants: &ParticleConstants<V>,
     h: f32,
     n_threads: usize
 ) {
@@ -371,11 +360,11 @@ pub fn cal_dt(safety: f32, viscous_safety: f32, h: f32, cmax: f32, vmax: f32, mu
     a.min(b)
 }
 
-pub fn leapfrog_ecs(
+pub fn leapfrog_ecs<V: Vector<f32>>(
     pg: &PixelGrid, index: &mut ParticleIndex,
-    pdata: &ParticleData,
-    pdata_new: &mut ParticleData,
-    particle_constants: &ParticleConstants, 
+    pdata: &ParticleData<V>,
+    pdata_new: &mut ParticleData<V>,
+    particle_constants: &ParticleConstants<V>, 
     dt: f32,
     h: f32,
     n_threads: usize
@@ -383,16 +372,19 @@ pub fn leapfrog_ecs(
 
     let t0 = Instant::now();
     for k in 0..pdata_new.n_fluid_particles {
-        pdata_new.v[k] = (
-            pdata.v[k].0 + pdata.a[k].0 * dt / 2.0,
-            pdata.v[k].1 + pdata.a[k].1 * dt / 2.0
-        );
-        // assert!(pdata_new.v[k].0.abs() < h/dt);
-        // assert!(pdata_new.v[k].1.abs() < h/dt);
-        pdata_new.x[k] = (
-            pdata.x[k].0 + dt * pdata_new.v[k].0,
-            pdata.x[k].1 + dt * pdata_new.v[k].1
-        );
+        // pdata_new.v[k] = (
+        //     pdata.v[k].0 + pdata.a[k].0 * dt / 2.0,
+        //     pdata.v[k].1 + pdata.a[k].1 * dt / 2.0
+        // );
+        // // assert!(pdata_new.v[k].0.abs() < h/dt);
+        // // assert!(pdata_new.v[k].1.abs() < h/dt);
+        // pdata_new.x[k] = (
+        //     pdata.x[k].0 + dt * pdata_new.v[k].0,
+        //     pdata.x[k].1 + dt * pdata_new.v[k].1
+        // );
+
+        pdata_new.v[k] += pdata.a[k] * dt / 2.0;
+        pdata_new.x[k] += pdata_new.v[k] * dt;
     }  
     let t1 = Instant::now();
 
@@ -407,10 +399,11 @@ pub fn leapfrog_ecs(
     let t4 = Instant::now();
 
     for k in 0..pdata_new.n_fluid_particles {
-        pdata_new.v[k] = (
-            pdata_new.v[k].0 + pdata_new.a[k].0 * dt / 2.0,
-            pdata_new.v[k].1 + pdata_new.a[k].1 * dt / 2.0
-        );
+        pdata_new.v[k] += pdata_new.a[k] * dt / 2.0;
+        // pdata_new.v[k] = (
+        //     pdata_new.v[k].0 + pdata_new.a[k].0 * dt / 2.0,
+        //     pdata_new.v[k].1 + pdata_new.a[k].1 * dt / 2.0
+        // );
     } 
     let t5 = Instant::now();
     println!("\t v1: {:?}, cal_dt {:?}, acc {:?} forces {:?}, v1/2 {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
@@ -421,6 +414,8 @@ pub fn leapfrog_ecs(
 mod tests {
     use super::*;
     use std::mem;
+
+    use cgmath::Vector2;
 
     #[test]
     fn test_cal_p() {
@@ -444,10 +439,10 @@ mod tests {
     #[test]
     fn test_2_particles() {
         let h: f32 = 2.0;
-        let mut dt: f32;
+        let mut dt: f32 = 0.001;
         let mut pdata = ParticleData::new(2, 2);
-        pdata.x[0] = (10.0, 10.0);
-        pdata.x[1] = (10.5, 10.0);
+        pdata.x[0] = Vector2::<f32>::new(10.0, 10.0);
+        pdata.x[1] = Vector2::<f32>::new(10.5, 10.0);
         let pg = PixelGrid::new(1000, 1000);
         let mut index = ParticleIndex::new(&pg, 2); 
         index.update(&pg, &pdata.x);
@@ -464,7 +459,7 @@ mod tests {
                 vec![1.0, 0.0], 
                 vec![0.0, 20.0]
             ],
-            body_force: (0.0, -0.9),
+            body_force: Vector2::<f32>::new(0.0, -0.9),
             gamma: 7.0
         };
 
@@ -484,7 +479,6 @@ mod tests {
             &pc, h, 2
         );
         leapfrog_update_acceleration_ecs(&mut pdata_new);
-        dt = cal_dt_exhaustive(&pdata_new, h, 0.01);
 
         println!("INIT LOOP");
 
@@ -496,13 +490,7 @@ mod tests {
         mem::swap(&mut pdata, &mut pdata_new);
 
         for _ in 0..20 {
-            
-            dt = leapfrog_ecs(
-                &pg, &mut index,
-                &pdata, &mut pdata_new,
-                &pc, dt, h, 5, 0.1
-            );  
-            
+                        
             let mut new_err = 0.0;
 
             for pi in 0..pdata.n_particles {

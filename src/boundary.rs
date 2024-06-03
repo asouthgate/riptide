@@ -82,7 +82,7 @@ pub fn get_ghost_box(pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i
         .. Default::default()
     });
     // res.push(Particle{
-    //     position: (je as f32 - 1.0 + pg.dx / 2.0, ie as f32),
+    //     position: (je as f32 - 1.x + pg.dx / 2.0, ie as f32),
     //     mass: mass,
     //     .. Default::default()
     // });
@@ -97,51 +97,27 @@ pub struct SquareBoundary {
 }
 
 impl SquareBoundary {
-    // pub fn enforce_boundary(
-    //     &self,
-    //     particles: &mut Vec<Particle>,
-    // ) {
-    //     // first naive case
-    //     for particle in particles {
-    //         if particle.position.0 < self.j0 {
-    //             particle.position.0 = self.j0;
-    //             particle.velocity.0 = -particle.velocity.0 / 2.0;
-    //         }
-    //         if particle.position.0 > self.je {
-    //             particle.position.0 = self.je;
-    //             particle.velocity.0 = -particle.velocity.0 / 2.0;
-    //         }
-    //         if particle.position.1 < self.i0 {
-    //             particle.position.1 = self.i0;
-    //             particle.velocity.1 = -particle.velocity.1 / 2.0;
-    //         }
-    //         if particle.position.1 > self.ie {
-    //             particle.position.1 = self.ie;
-    //             particle.velocity.1 = -particle.velocity.1 / 2.0;
-    //         }
-    //     }
-    // }
     pub fn enforce_boundary_ecs(
         &self,
-        pdata: &mut ParticleData,
+        pdata: &mut ParticleData<cgmath::Vector2<f32>>,
     ) {
         // first naive case
         for pi in 0..pdata.n_fluid_particles {
-            if pdata.x[pi].0 < self.j0 {
-                pdata.x[pi].0 = self.j0;
-                pdata.v[pi].0 = -pdata.v[pi].0;
+            if pdata.x[pi].x < self.j0 {
+                pdata.x[pi].x = self.j0;
+                pdata.v[pi].x = -pdata.v[pi].x;
             }
-            if pdata.x[pi].0 > self.je {
-                pdata.x[pi].0 = self.je; 
-                pdata.v[pi].0 = -pdata.v[pi].0;
+            if pdata.x[pi].x > self.je {
+                pdata.x[pi].x = self.je; 
+                pdata.v[pi].x = -pdata.v[pi].x;
             }
-            if pdata.x[pi].1 < self.i0 {
-                pdata.x[pi].1 = self.i0;
-                pdata.v[pi].1 = -pdata.v[pi].1;
+            if pdata.x[pi].y < self.i0 {
+                pdata.x[pi].y = self.i0;
+                pdata.v[pi].y = -pdata.v[pi].y;
             }
-            if pdata.x[pi].1 > self.ie {
-                pdata.x[pi].1 = self.ie;
-                pdata.v[pi].1 = -pdata.v[pi].1;
+            if pdata.x[pi].y > self.ie {
+                pdata.x[pi].y = self.ie;
+                pdata.v[pi].y = -pdata.v[pi].y;
             }
         }
     }
@@ -160,25 +136,25 @@ pub struct HyperbolicSquareBoundary {
 impl HyperbolicSquareBoundary {
     pub fn enforce_boundary_ecs(
         &self,
-        pdata: &mut ParticleData,
+        pdata: &mut ParticleData<cgmath::Vector2<f32>>,
     ) {
         // first naive case
         for pi in 0..pdata.n_fluid_particles {
-            if pdata.x[pi].0 <= self.j0 {
-                pdata.x[pi].0 = self.je - 1.0;
-                // pdata.v[pi].0 = -pdata.v[pi].0;
+            if pdata.x[pi].x <= self.j0 {
+                pdata.x[pi].x = self.je - 1.0;
+                // pdata.v[pi].x = -pdata.v[pi].x;
             }
-            if pdata.x[pi].0 >= self.je {
-                pdata.x[pi].0 = self.j0 + 1.0;
-                // pdata.v[pi].0 = -pdata.v[pi].0;
+            if pdata.x[pi].x >= self.je {
+                pdata.x[pi].x = self.j0 + 1.0;
+                // pdata.v[pi].x = -pdata.v[pi].x;
             }
-            if pdata.x[pi].1 <= self.i0 {
-                pdata.x[pi].1 = self.ie - 1.0;
-                // pdata.v[pi].1 = -pdata.v[pi].1;
+            if pdata.x[pi].y <= self.i0 {
+                pdata.x[pi].y = self.ie - 1.0;
+                // pdata.v[pi].y = -pdata.v[pi].y;
             }
-            if pdata.x[pi].1 >= self.ie {
-                pdata.x[pi].1 = self.i0 + 1.0;
-                // pdata.v[pi].1 = -pdata.v[pi].1;
+            if pdata.x[pi].y >= self.ie {
+                pdata.x[pi].y = self.i0 + 1.0;
+                // pdata.v[pi].y = -pdata.v[pi].y;
             }
         }
     }

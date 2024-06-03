@@ -6,8 +6,8 @@ use std::ops::{
 };
 
 pub trait Vector<T>: 
-    Add + Sub + 
-    Mul<T> + Div<T, Output=Self> + 
+    Add<Output = Self> + Sub<Output = Self> + 
+    Mul<T, Output = Self> + Div<T, Output=Self> + 
     Sized + 
     Index<usize, Output=T> + 
     IndexMut<usize> + 
@@ -15,7 +15,9 @@ pub trait Vector<T>:
     DivAssign<T> +
     AddAssign<Self> +
     SubAssign<Self> +
-    Copy
+    Copy +
+    Send + 
+    Sync
 {
     fn magnitude(&self) -> T;
     fn dot(&self, other: &Self) -> T;

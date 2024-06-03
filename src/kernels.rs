@@ -1,3 +1,5 @@
+use crate::vector::*;
+
 const PI: f32 = 3.141592653589793;
 
 fn cubic_spline_fac(h: f32) -> f32 {
@@ -89,6 +91,12 @@ pub fn debrun_spiky_kernel_grad(dx: f32, dy: f32, h: f32) -> (f32, f32) {
     // println!("\t \t \t {}", r);
     let dwdror = debrun_spiky_kernel_dwdr(r, h) / r;
     (dx * dwdror, dy * dwdror)
+}
+
+pub fn debrun_spiky_kernel_grad_vec<V: Vector<f32>>(dx: V, h: f32) -> V {
+    let r = dx.magnitude();
+    let dwdror = debrun_spiky_kernel_dwdr(r, h) / r;
+    dx * dwdror
 }
 
 #[cfg(test)]
