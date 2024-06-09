@@ -10,6 +10,23 @@ pub struct PixelGrid {
     pub h: f32,
 }
 
+pub struct VoxelGrid {
+    pub m: usize,
+    pub n: usize,
+    pub l: usize,
+    pub mn: usize,
+    pub mnl: usize,
+    pub dx: f32,
+    pub dy: f32,
+    pub dz: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+    pub h: f32,
+    pub d: f32,
+}
+
 impl PixelGrid {
     pub fn new(_m: usize, _n: usize) -> Self {
         PixelGrid {
@@ -128,6 +145,114 @@ impl PixelGrid {
     }
 }
 
+impl VoxelGrid {
+    pub fn new(_m: usize, _n: usize, _l: usize) -> Self {
+        VoxelGrid {
+            m: _m,
+            n: _n,
+            l: _l,
+            mn: _m * _n,
+            mnl: _m * _n * _l,
+            dx: 1.0,
+            dy: 1.0,
+            dz: 1.0,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w: _n as f32,
+            h: _m as f32,
+            d: _l as f32
+        }
+    }
+
+    pub fn new_with_transform(
+        _m: usize,
+        _n: usize,
+        _l: usize,
+        _dx: f32,
+        _dy: f32,
+        _dz: f32,
+        _x: f32,
+        _y: f32,
+        _z: f32
+    ) -> Self {
+        VoxelGrid {
+            m: _m,
+            n: _n,
+            l: _l,
+            mn: _m * _n,
+            mnl: _m * _n * _l,
+            dx: _dx,
+            dy: _dy,
+            dz: _dz,
+            x: _x,
+            y: _y,
+            z: _z,
+            w: _dx * _n as f32,
+            h: _dy * _m as f32,
+            d: _dz * _l as f32
+        }
+    }
+
+    pub fn print_data(&self, data: &Vec<f32>) {
+        let prec = 3;
+        let underscores = "-".repeat(( 2 + prec + 1) * self.n);
+        println!("-{}", underscores);
+        for k in 0..self.l {
+            for i in 0..self.m {
+                print!("|");
+                for j in 0..self.n {
+                    let f = format!("{:.precision$}", data[k * self.mn + i * self.n + j], precision = prec);
+                    print!("{}|", f);
+                }
+                println!();
+            }
+            println!();
+        }
+        println!("-{}", underscores);
+    }
+
+    pub fn sample_world(&self, data: &Vec<f32>, wx: f32, wy: f32, wz: f32) -> f32 {
+        let (x, y, z) = self.worldxyz2xyz(wx, wy, wz);
+        self.sample(data, x, y, z)
+    }
+
+    pub fn sample(&self, data: &Vec<f32>, x: f32, y: f32, z: f32) -> f32 {
+        data[self.xyz2ak(x, y, z)]
+    }
+
+    pub fn xyz2ijk(&self, x: f32, y: f32, z: f32) -> Option<(usize, usize, usize)> {
+        match (x, y, z) {
+            (x, _, _) if (x > self.n as f32 || x < 0.0) => None,
+            (_, y, _) if (y > self.m as f32 || y < 0.0) => None,
+            (_, _, z) if (z > self.l as f32 || z < 0.0) => None,
+            _ => {
+                Some((y.trunc() as usize, x.trunc() as usize, z.trunc() as usize))
+            }
+        }
+    }
+
+    pub fn ijk2ak_nocheck(&self, i: usize, j: usize, k: usize) -> usize {
+        k * self.mn + i * self.n + j
+    }
+
+    pub fn xyz2ak(&self, x: f32, y: f32, z: f32) -> usize {
+        let (i, j, k) = self.xyz2ijk(x, y, z).unwrap();
+        self.ijk2ak_nocheck(i, j, k)
+    }
+
+    pub fn worldxyz2xyz(&self, wx: f32, wy: f32, wz: f32) -> (f32, f32, f32) {
+        let x_grid = wx - self.x;
+        let y_grid = wy - self.y;
+        let z_grid = wz - self.z;
+        let x = x_grid / self.dx;
+        let y = y_grid / self.dy;
+        let z = z_grid / self.dz;
+        (x, y, z)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,5 +289,41 @@ mod tests {
         (x, y) = pg.worldxy2xy(-100.0, -100.0);
         assert_eq!((x, y), (-200.0, -200.0));
     }
+
+    #[test]
+    fn test_xyz2ijk_oob() {
+        let pg = VoxelGrid::new(100, 100, 100);
+        let mut result: Option<(usize, usize, usize)> = pg.xyz2ijk(120.0, 90.0, 90.0);
+        assert_eq!(result, None);
+        result = pg.xyz2ijk(90.0, 101.0, 90.0);
+        assert_eq!(result, None);
+        result = pg.xyz2ijk(-101.0, 90.0, 90.0);
+        assert_eq!(result, None);
+        result = pg.xyz2ijk(-101.0, -900.0, 90.0);
+        assert_eq!(result, None);
+        result = pg.xyz2ijk(20.0, 4.0, 110.0);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_worldxy2xyz_noscaling() {
+        let pg = VoxelGrid::new(100, 100, 100);
+        let (mut x, mut y, mut z) = pg.worldxyz2xyz(90.0, 80.0, 90.0);
+        assert_eq!((x, y, z), (90.0, 80.0, 90.0));
+        (x, y, z) = pg.worldxyz2xyz(-90.0, 80.0, 50.0);
+        assert_eq!((x, y, z), (-90.0, 80.0, 50.0));
+        (x, y, z) = pg.worldxyz2xyz(-90.0, -80.0, -20.0);
+        assert_eq!((x, y, z), (-90.0, -80.0, -20.0));
+   }
+
+   #[test]
+    fn test_worldxy2xyz_scaling() {
+        let pg = VoxelGrid::new_with_transform(100, 100, 100, 0.5, 0.5, 0.5, 0.0, 0.0, 0.0);
+        let (mut x, mut y, mut z) = pg.worldxyz2xyz(100.0, 100.0, 100.0);
+        assert_eq!((x, y, z), (200.0, 200.0, 200.0));
+        (x, y, z) = pg.worldxyz2xyz(-100.0, -100.0, -100.0);
+        assert_eq!((x, y, z), (-200.0, -200.0, -200.0));
+    }
+
 
 }
