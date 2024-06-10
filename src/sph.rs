@@ -279,7 +279,7 @@ pub fn leapfrog_update_acceleration_ecs<V: Vector<f32>>(
 }
 
 
-pub fn leapfrog_cal_forces_ecs<V: Vector<f32>>(
+pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
     pg: &PixelGrid, pindex: &mut ParticleIndex,
     pdata: &ParticleData<V>,
     pdata_new: &mut ParticleData<V>,
@@ -338,7 +338,7 @@ pub fn cal_dt(safety: f32, viscous_safety: f32, h: f32, cmax: f32, vmax: f32, mu
     a.min(b)
 }
 
-pub fn leapfrog_ecs<V: Vector<f32>>(
+pub fn leapfrog_ecs<V: Vector<f32> + Indexable>(
     pg: &PixelGrid, index: &mut ParticleIndex,
     pdata: &ParticleData<V>,
     pdata_new: &mut ParticleData<V>,

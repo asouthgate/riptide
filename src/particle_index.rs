@@ -1,5 +1,24 @@
 use crate::pixelgrid::PixelGrid;
 use crate::vector::Vector;
+use cgmath::{Vector2, Vector3};
+
+pub trait Indexable {
+    fn get_ak(&self, pg: &PixelGrid) -> usize;
+}
+
+impl Indexable for Vector2<f32> {
+    fn get_ak(&self, pg: &PixelGrid) -> usize {
+        let (x, y) = pg.worldxy2xy(self[0], self[1]);
+        pg.xy2ak(x, y)    
+    }
+}
+
+impl Indexable for Vector3<f32> {
+    fn get_ak(&self, pg: &PixelGrid) -> usize {
+        let (x, y, z) = pg.worldxyz2xyz(self[0], self[1], self[2]);
+        pg.xyz2ak(x, y, z)
+    }
+}
 
 pub struct ParticleIndex {
     start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
@@ -17,14 +36,16 @@ impl ParticleIndex {
             neighbors: vec![vec![]; n_particles]
         }
     }
-    pub fn update<V: Vector<f32>>(&mut self, pg: &PixelGrid, x: &Vec<V>) {
+    pub fn update<V>(&mut self, pg: &PixelGrid, x: &Vec<V>)
+        where V: Vector<f32> + Indexable
+    {
         let mut pi2ak = vec![0; x.len()];
         let mut pi2ak_sorted = vec![0; x.len()];
         self.start2neighbors = (0..pi2ak.len()).collect();
         for pi in 0..x.len() {
-            let (x, y) = pg.worldxy2xy(x[pi][0], x[pi][1]);
-            let ak = pg.xy2ak(x, y);
-            pi2ak[pi] = ak;
+            // let (x, y) = pg.worldxy2xy(x[pi][0], x[pi][1]);
+            // let ak = pg.xy2ak(x, y);
+            pi2ak[pi] = x[pi].get_ak(pg);
         }
         // piarr:                   [0, 1, 2, 3, 4]
         // pi2ak:                   [1, 3, 5, 4, 1]
