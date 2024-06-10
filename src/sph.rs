@@ -2,6 +2,7 @@ use crate::particle_ecs::*;
 use crate::pixelgrid::PixelGrid;
 use crate::particle_index::*;
 use crate::kernels::*;
+use rayon::prelude::*;
 use std::time::Instant;
 
 use crate::vector::*;
@@ -82,6 +83,29 @@ fn cal_pressure_force_ij<V: Vector<f32>>(pi: f32, pj: f32, rhoi: f32, rhoj: f32,
     gradw * pforce_coefficient
 }
 
+
+pub fn update_empty_test_ecs<V: Vector<f32> + Indexable>(
+    x: &Vec<V>,
+    nbrs: &Vec<Vec<usize>>,
+    pg: &PixelGrid,
+    nthread: usize
+) {
+
+    let n_chunks = nthread.min(x.len());
+    let chunk_size = x.len() / n_chunks;
+
+    x
+        .par_iter()
+        .enumerate()
+        .for_each(|(i, xi)| {
+            let ak = xi.get_ak(pg);
+            for j in &nbrs[ak] {
+
+            }
+        })
+}
+
+
 // Update particle densities.
 //
 // This function takes a vector of particles, and for a given particle
@@ -90,11 +114,11 @@ fn cal_pressure_force_ij<V: Vector<f32>>(pi: f32, pj: f32, rhoi: f32, rhoj: f32,
 /// * `particle_data`
 /// * `pindex`
 /// * `h` - characteristic length
-pub fn update_densities_ecs<V: Vector<f32>>(
+pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
     xmain: &Vec<V>,
     mass: &Vec<f32>,
     density: &mut Vec<f32>,
-    pindex: &ParticleIndex,
+    nbrs: &Vec<Vec<usize>>,
     n_particles: usize,
     h: f32,
     pg: &PixelGrid,
@@ -115,18 +139,22 @@ pub fn update_densities_ecs<V: Vector<f32>>(
                 for (chunk_i, densityi) in density.iter_mut().enumerate() { // ignore static particle
                     let i = chunk_i + start;
                     let xi = x[i];
-                    // assert!(!x[i][0].is_nan());
-                    // assert!(!x[i][1].is_nan());
+                    assert!(!x[i][0].is_nan());
+                    assert!(!x[i][1].is_nan());
                     *densityi = 0.0;
-                    let slices = pindex.get_nbr_slices(&pg, xi[0], xi[1]);
-                    for slice in slices.iter() {
-                        for &j in *slice {
-                            let rij = (xi - x[j]).magnitude();
-                            *densityi += cal_rho_ij(mass[j], rij, h); 
-                            // assert!(!density[chunk_i].is_nan());
-                        }            
+                    // let slices = pindex.get_nbr_slices(&pg, xi[0], xi[1]);
+                    // for slice in slices.iter() {
+                    //     for &j in *slice {
+                    let ak = xi.get_ak(pg);
+                    for j in &nbrs[ak] {
+                        let rij = (xi - x[*j]).magnitude();
+                        *densityi += cal_rho_ij(mass[*j], rij, h);
+                        // assert!(rij <= 2.0_f32.sqrt());
+                        assert!(mass[*j] > 0.0);
+                        assert!(!(*densityi).is_nan());
+                        // }            
                     }
-                    // assert!(density[chunk_i] > 0.0);
+                    assert!(*densityi > 0.0);
                 }
             });
         }
@@ -291,12 +319,16 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
     let t0 = Instant::now();
 
     pindex.update(pg, &pdata_new.x); // should be new
+    let nbrs = pindex.precompute_nbrs(pg, &pdata_new.x);
+
     let t1 = Instant::now();
 
     // update forces
     update_densities_ecs(
-        &pdata_new.x, &pdata.mass, &mut pdata_new.density, pindex, pdata.n_particles, h, pg, n_threads
+        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &nbrs, pdata.n_particles, h, pg, n_threads
     );
+    let t2 = Instant::now();
+
     update_pressures_ecs(
         &mut pdata_new.pressure,
         &pdata_new.density,
@@ -305,7 +337,7 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
         &particle_constants.rho0_vec, 
         &particle_constants.c2_vec,
     );
-    let t2 = Instant::now();
+    let t3 = Instant::now();
 
     update_forces_ecs(
         &pdata_new.x,
@@ -327,8 +359,12 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
         pg,
         n_threads
     );
-    let t3 = Instant::now();
-    println!("\t\t cal forces: {:?}, density updates {:?}, pindex_update {:?}", t3-t2, t2-t1, t1-t0);
+    let t4 = Instant::now();
+    update_empty_test_ecs(
+        &pdata_new.x, &nbrs, pg, n_threads
+    );
+    let t5 = Instant::now();
+    println!("\t\t emptytest: {:?} cal forces: {:?}, pressure {:?}, density updates {:?}, pindex_update {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
 
 }
 

@@ -24,8 +24,7 @@ impl Indexable for Vector3<f32> {
 pub struct ParticleIndex {
     pub start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
     ak2start: Vec<usize>, // for each ak, gives index aj of nbr_array, with nbrs
-    ak2end: Vec<usize>, // not inclusive, like a 0..end, [a, b)
-    pub neighbors: Vec<Vec<usize>>
+    ak2end: Vec<usize> // not inclusive, like a 0..end, [a, b)
 }
 
 impl ParticleIndex {
@@ -34,7 +33,7 @@ impl ParticleIndex {
             ak2start: vec![0; pg.size()],
             ak2end: vec![0; pg.size()],
             start2neighbors: vec![0; n_particles],
-            neighbors: vec![vec![]; n_particles]
+            // neighbors: vec![vec![]; n_particles]
         }
     }
     pub fn update<V>(&mut self, pg: &PixelGrid, x: &Vec<V>)
@@ -100,6 +99,49 @@ impl ParticleIndex {
         }
         result
     }
+    pub fn get_nbr_vec<'a>(
+        &'a self, pg: &PixelGrid, ak0: usize
+    ) -> Vec<usize>
+    {
+        let mut result: Vec<usize> = vec![];
+
+        let i = ak0 / pg.n;
+        let j = ak0 % pg.n;
+
+        let djmin = (j as i32 - 1).max(0) as usize;
+        let djmax = (j as i32 + 1).min(pg.n as i32 - 1) as usize;
+        let dimin = (i as i32 - 1).max(0) as usize;
+        let dimax = (i as i32 + 1).min(pg.m as i32 - 1) as usize;
+        for di in dimin..=dimax {
+            for dj in djmin..=djmax {
+                let ak = pg.ij2ak_nocheck(di, dj);
+                let start = self.ak2start[ak];
+                if start >= self.start2neighbors.len() {
+                    continue;
+                } else {
+                    let end = self.ak2end[ak];
+                    result.extend_from_slice(&self.start2neighbors[start..end]);
+                }
+            }
+        }
+        assert!(result.len() > 0);
+        result
+    }
+    pub fn precompute_nbrs<V: Vector<f32> + Indexable>(
+        &mut self, pg: &PixelGrid, x: &Vec<V>
+    ) -> Vec<Vec<usize>> {
+        // you are wasting nbr computation for each cell;
+        // a cell may have 10 particles. dont recompute nbrs 10 times
+        // for pi, this is the nbrs for particle i
+        let mut nbrs: Vec<Vec<usize>> = vec![vec![]; pg.size()];
+        for v in x {
+            let ak = v.get_ak(pg);
+            if nbrs[ak].len() == 0 {
+                nbrs[ak] = self.get_nbr_vec(pg, ak); 
+            }
+        }
+        nbrs
+    }
 }
 
 
@@ -141,6 +183,19 @@ mod tests {
         }
     }
     #[test]
+    fn test_precompute_isolated_particle() {
+        // in this scenario, only two particles; only a few slots have them
+        let pg = PixelGrid::new_with_transform(10, 10, 1.0, 1.0, -5.0, -5.0);
+
+        let mut pdata = ParticleData::<Vector2<f32>>::new(1, 1);
+        let mut index = ParticleIndex::new(&pg, 1);
+
+        pdata.x[0] = Vector2::<f32>::new(-5.0, -5.0);
+        index.update(&pg, &pdata.x);
+        let mut pre_nbrs = index.precompute_nbrs(&pg, &pdata.x);
+        assert!(pre_nbrs[0].len() > 0);
+    }
+    #[test]
     fn test_particle_retrieval() {
         // in this scenario, only two particles; only a few slots have them
         let pg = PixelGrid::new_with_transform(10, 10, 1.0, 1.0, -5.0, -5.0);
@@ -156,12 +211,17 @@ mod tests {
         }
         let mut index = ParticleIndex::new(&pg, n_particles);
         index.update(&pg, &pdata.x);
+        let mut pre_nbrs = index.precompute_nbrs(&pg, &pdata.x);
 
         let nbrs: Vec<usize> = index.get_nbr_slices(&pg, -5.0, -5.0)
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
-        println!("{} {}: {:?} {:?}", -5.0, -5.0, nbrs, index.neighbors[0]);
+        println!("{} {}: {:?} ", -5.0, -5.0, nbrs);
         assert!(nbrs.len() == 4);
         assert!(nbrs == vec![0, 1, 10, 11]);
+        let (x, y) = pg.worldxy2xy(-5.0, -5.0);
+        let mut ak = pg.xy2ak(x, y);
+        assert!(nbrs == pre_nbrs[ak]);
+        println!("??{:?}", pre_nbrs[ak]);
 
         let nbrs: Vec<usize> = index.get_nbr_slices(&pg, -5.0, -4.0)
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
@@ -184,18 +244,29 @@ mod tests {
         // now, move one of the particles to the middle
         pdata.x[0] = Vector2::<f32>::new(0.5, 0.5);
         index.update(&pg, &pdata.x);
+        pre_nbrs = index.precompute_nbrs(&pg, &pdata.x);
 
         let nbrs: Vec<usize> = index.get_nbr_slices(&pg, 0.5, 0.5)
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         assert!(nbrs.len() == 10);
         println!("{} {}: {:?}", 0.5, 0.5, nbrs);
         assert!(nbrs.contains(&0));
+        for nbrlist in &pre_nbrs {
+            println!("{:?}", nbrlist);
+        }
 
         let nbrs: Vec<usize> = index.get_nbr_slices(&pg, 1.5, 1.5)
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         assert!(nbrs.len() == 10);
         println!("{} {}: {:?}", 1.5, 1.5, nbrs);
         assert!(nbrs.contains(&0));
+        let (x, y) = pg.worldxy2xy(1.5, 1.5);
+        let mut ak = pg.xy2ak(x, y);
+        println!("{}", ak);
+        println!("??{:?}", pre_nbrs[ak]);
+        println!("??{:?}", nbrs);
+        assert!(nbrs == pre_nbrs[ak]);
+
     }
 
 }
