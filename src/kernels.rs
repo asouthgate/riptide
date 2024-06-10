@@ -42,10 +42,12 @@ pub fn cubic_spline_grad(dx: f32, dy: f32, r: f32, h: f32) -> (f32, f32) {
     }
 }
 
+#[inline]
 fn get_debrun_coeff(h: f32) -> f32 { // TWO DIMENSIONAL CASE
     10.0 / (PI * h.powi(5))
 }
 
+#[inline]
 pub fn debrun_spiky_kernel(r: f32, h: f32) -> f32 {
     match r {
         _r if r < 0.0 => {

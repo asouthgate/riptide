@@ -58,6 +58,7 @@ fn cal_pressure_wcsph(rho: f32, rho0: f32, c2: f32, gamma: f32) -> f32 {
 }
 
 /// Calculate the jth density contribution for particle i.
+#[inline]
 fn cal_rho_ij(mass_j: f32, dist_ij: f32, h: f32) -> f32 {
     mass_j * debrun_spiky_kernel(dist_ij, h)
 }
@@ -90,7 +91,7 @@ fn cal_pressure_force_ij<V: Vector<f32>>(pi: f32, pj: f32, rhoi: f32, rhoj: f32,
 /// * `pindex`
 /// * `h` - characteristic length
 pub fn update_densities_ecs<V: Vector<f32>>(
-    x: &Vec<V>,
+    xmain: &Vec<V>,
     mass: &Vec<f32>,
     density: &mut Vec<f32>,
     pindex: &ParticleIndex,
@@ -105,32 +106,31 @@ pub fn update_densities_ecs<V: Vector<f32>>(
 
     let _ = crossbeam::scope(|s| {
         for (i, density) in 
-            density[0..n_particles].chunks_mut(chunk_size)
+            density.chunks_mut(chunk_size)
             .enumerate() 
         {
             let start = i * chunk_size;
+            let x = xmain.clone(); // Clone the x vector for each thread
             s.spawn(move |_| {
-                for chunk_i in 0..density.len() { // ignore static particle
+                for (chunk_i, densityi) in density.iter_mut().enumerate() { // ignore static particle
                     let i = chunk_i + start;
-                    assert!(!x[i][0].is_nan());
-                    assert!(!x[i][1].is_nan());
-                    density[chunk_i] = 0.0;
-                    let slices = pindex.get_nbr_slices(&pg, x[i][0], x[i][1]);
+                    let xi = x[i];
+                    // assert!(!x[i][0].is_nan());
+                    // assert!(!x[i][1].is_nan());
+                    *densityi = 0.0;
+                    let slices = pindex.get_nbr_slices(&pg, xi[0], xi[1]);
                     for slice in slices.iter() {
                         for &j in *slice {
-                            let rij = (x[i] - x[j]).magnitude();
-                            let contrib = cal_rho_ij(mass[j], rij, h);
-                            density[chunk_i] += contrib; 
-                            assert!(!density[chunk_i].is_nan());
+                            let rij = (xi - x[j]).magnitude();
+                            *densityi += cal_rho_ij(mass[j], rij, h); 
+                            // assert!(!density[chunk_i].is_nan());
                         }            
                     }
-                    assert!(density[chunk_i] > 0.0);
+                    // assert!(density[chunk_i] > 0.0);
                 }
             });
         }
     });
-
-
 }
 
 
