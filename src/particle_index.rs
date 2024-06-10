@@ -11,8 +11,8 @@ pub struct ParticleIndex {
 impl ParticleIndex {
     pub fn new(pg: &PixelGrid, n_particles: usize) -> Self {
         ParticleIndex {
-            ak2start: vec![0; pg.m * pg.n],
-            ak2end: vec![0; pg.m * pg.n],
+            ak2start: vec![0; pg.size()],
+            ak2end: vec![0; pg.size()],
             start2neighbors: vec![0; n_particles],
             neighbors: vec![vec![]; n_particles]
         }
@@ -37,8 +37,8 @@ impl ParticleIndex {
         for (pi, ind) in self.start2neighbors.iter().enumerate() {
             pi2ak_sorted[pi] = pi2ak[*ind];
         }
-        self.ak2start = vec![pi2ak_sorted.len() + 2; pg.m * pg.n]; // out of bounds = NaN
-        self.ak2end = vec![pi2ak_sorted.len() + 2; pg.m * pg.n];
+        self.ak2start = vec![pi2ak_sorted.len() + 2; pg.size()]; // out of bounds = NaN
+        self.ak2end = vec![pi2ak_sorted.len() + 2; pg.size()];
         for (i, ak) in pi2ak_sorted.iter().enumerate() {
             if self.ak2start[*ak] == pi2ak_sorted.len() + 2 {
                 self.ak2start[*ak] = i; // only do this if it's not already been set
@@ -117,7 +117,7 @@ mod tests {
     #[test]
     fn test_particle_index_count() {
         let pg = PixelGrid::new(4, 4);
-        let n_particles = pg.n * pg.m;
+        let n_particles = pg.size();
         let mut pdata = ParticleData::<Vector2<f32>>::new(n_particles, n_particles);
 
         let mut pi = 0;
@@ -149,7 +149,7 @@ mod tests {
         // in this scenario, only two particles; only a few slots have them
         let pg = PixelGrid::new_with_transform(10, 10, 1.0, 1.0, -5.0, -5.0);
 
-        let n_particles = pg.n * pg.m;
+        let n_particles = pg.size();
         let mut pdata = ParticleData::<Vector2<f32>>::new(n_particles, n_particles);
 
         // arrange the particles on a grid

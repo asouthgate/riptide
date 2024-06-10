@@ -20,7 +20,7 @@ impl Default for PixelGrid {
         Self {
             m: 100,
             n: 100,
-            l: 0,
+            l: 1,
             mn: 100 * 100,
             mnl: 100 * 100,
             dx: 1.0,
@@ -72,7 +72,7 @@ impl PixelGrid {
         }
     }
 
-    pub fn new3D(_m: usize, _n: usize, _l: usize) -> Self {
+    pub fn new3d(_m: usize, _n: usize, _l: usize) -> Self {
         PixelGrid {
             m: _m,
             n: _n,
@@ -87,7 +87,7 @@ impl PixelGrid {
         }
     }
 
-    pub fn new3D_with_transform(
+    pub fn new3d_with_transform(
         _m: usize,
         _n: usize,
         _l: usize,
@@ -116,6 +116,10 @@ impl PixelGrid {
         }
     }
 
+    pub fn size(&self) -> usize {
+        self. m * self. n * self.l
+    }
+
     pub fn print_data(&self, data: &Vec<f32>) {
         let prec = 3;
         let underscores = "-".repeat(( 2 + prec + 1) * self.n);
@@ -134,12 +138,12 @@ impl PixelGrid {
         println!("-{}", underscores);
     }
 
-    pub fn sample_world_3D(&self, data: &Vec<f32>, wx: f32, wy: f32, wz: f32) -> f32 {
+    pub fn sample_world_3d(&self, data: &Vec<f32>, wx: f32, wy: f32, wz: f32) -> f32 {
         let (x, y, z) = self.worldxyz2xyz(wx, wy, wz);
-        self.sample_3D(data, x, y, z)
+        self.sample_3d(data, x, y, z)
     }
 
-    pub fn sample_3D(&self, data: &Vec<f32>, x: f32, y: f32, z: f32) -> f32 {
+    pub fn sample_3d(&self, data: &Vec<f32>, x: f32, y: f32, z: f32) -> f32 {
         data[self.xyz2ak(x, y, z)]
     }
 
@@ -280,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_xyz2ijk_oob() {
-        let pg = PixelGrid::new3D(100, 100, 100);
+        let pg = PixelGrid::new3d(100, 100, 100);
         let mut result: Option<(usize, usize, usize)> = pg.xyz2ijk(120.0, 90.0, 90.0);
         assert_eq!(result, None);
         result = pg.xyz2ijk(90.0, 101.0, 90.0);
@@ -295,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_worldxy2xyz_noscaling() {
-        let pg = PixelGrid::new3D(100, 100, 100);
+        let pg = PixelGrid::new3d(100, 100, 100);
         let (mut x, mut y, mut z) = pg.worldxyz2xyz(90.0, 80.0, 90.0);
         assert_eq!((x, y, z), (90.0, 80.0, 90.0));
         (x, y, z) = pg.worldxyz2xyz(-90.0, 80.0, 50.0);
@@ -306,7 +310,7 @@ mod tests {
 
    #[test]
     fn test_worldxy2xyz_scaling() {
-        let pg = PixelGrid::new3D_with_transform(100, 100, 100, 0.5, 0.5, 0.5, 0.0, 0.0, 0.0);
+        let pg = PixelGrid::new3d_with_transform(100, 100, 100, 0.5, 0.5, 0.5, 0.0, 0.0, 0.0);
         let (mut x, mut y, mut z) = pg.worldxyz2xyz(100.0, 100.0, 100.0);
         assert_eq!((x, y, z), (200.0, 200.0, 200.0));
         (x, y, z) = pg.worldxyz2xyz(-100.0, -100.0, -100.0);
