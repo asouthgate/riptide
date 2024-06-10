@@ -17,7 +17,8 @@ pub trait Vector<T>:
     SubAssign<Self> +
     Copy +
     Send + 
-    Sync
+    Sync + 
+    std::fmt::Debug
 {
     fn magnitude(&self) -> T;
     fn dot(&self, other: &Self) -> T;

@@ -54,19 +54,24 @@ pub fn get_ghost_box(pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i
             .. Default::default()
         });
     }
-    for j in j0..je {
-        res.push(Particle{
-            position: (j as f32, i0 as f32),
-            mass: mass,
-            .. Default::default()
-        });
-        res.push(Particle{
-            position: (j as f32, ie as f32),
-            mass: mass,
-            .. Default::default()
-        });
+    res.push(Particle{
+        position: (j0 as f32, ie as f32),
+        mass: mass,
+        .. Default::default()
+    });
+    res.push(Particle{
+        position: (je as f32, ie as f32),
+        mass: mass,
+        .. Default::default()
+    });
+    for j in j0..je-1 {
         res.push(Particle{
             position: (j as f32 + pg.dx / 2.0, i0 as f32),
+            mass: mass,
+            .. Default::default()
+        });
+        res.push(Particle{
+            position: (j as f32 + pg.dx, i0 as f32),
             mass: mass,
             .. Default::default()
         });
@@ -75,17 +80,22 @@ pub fn get_ghost_box(pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i
             mass: mass,
             .. Default::default()
         });
+        res.push(Particle{
+            position: (j as f32 + 1.0, ie as f32),
+            mass: mass,
+            .. Default::default()
+        });
     }
     res.push(Particle{
-        position: (je as f32, ie as f32),
+        position: (je as f32 - pg.dx / 2.0, i0 as f32),
         mass: mass,
         .. Default::default()
     });
-    // res.push(Particle{
-    //     position: (je as f32 - 1.x + pg.dx / 2.0, ie as f32),
-    //     mass: mass,
-    //     .. Default::default()
-    // });
+    res.push(Particle{
+        position: (je as f32 - pg.dx / 2.0, ie as f32),
+        mass: mass,
+        .. Default::default()
+    });
     res
 }
 
@@ -102,7 +112,7 @@ impl SquareBoundary {
         pdata: &mut ParticleData<cgmath::Vector2<f32>>,
     ) {
         // first naive case
-        for pi in 0..pdata.n_fluid_particles {
+        for pi in 0..pdata.n_particles {
             if pdata.x[pi].x < self.j0 {
                 pdata.x[pi].x = self.j0;
                 pdata.v[pi].x = -pdata.v[pi].x;
@@ -140,21 +150,23 @@ impl HyperbolicSquareBoundary {
     ) {
         // first naive case
         for pi in 0..pdata.n_fluid_particles {
-            if pdata.x[pi].x <= self.j0 {
-                pdata.x[pi].x = self.je - 1.0;
-                // pdata.v[pi].x = -pdata.v[pi].x;
-            }
-            if pdata.x[pi].x >= self.je {
-                pdata.x[pi].x = self.j0 + 1.0;
-                // pdata.v[pi].x = -pdata.v[pi].x;
-            }
-            if pdata.x[pi].y <= self.i0 {
-                pdata.x[pi].y = self.ie - 1.0;
-                // pdata.v[pi].y = -pdata.v[pi].y;
-            }
-            if pdata.x[pi].y >= self.ie {
-                pdata.x[pi].y = self.i0 + 1.0;
-                // pdata.v[pi].y = -pdata.v[pi].y;
+            if pdata.boundary[pi] == 0 {
+                if pdata.x[pi].x <= self.j0 {
+                    pdata.x[pi].x = self.je - 1.0;
+                    // pdata.v[pi].x = -pdata.v[pi].x;
+                }
+                if pdata.x[pi].x >= self.je {
+                    pdata.x[pi].x = self.j0 + 1.0;
+                    // pdata.v[pi].x = -pdata.v[pi].x;
+                }
+                if pdata.x[pi].y <= self.i0 {
+                    pdata.x[pi].y = self.ie - 1.0;
+                    // pdata.v[pi].y = -pdata.v[pi].y;
+                }
+                if pdata.x[pi].y >= self.ie {
+                    pdata.x[pi].y = self.i0 + 1.0;
+                    // pdata.v[pi].y = -pdata.v[pi].y;
+                }
             }
         }
     }

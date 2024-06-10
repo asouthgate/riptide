@@ -2,6 +2,7 @@ use crate::pixelgrid::PixelGrid;
 use crate::vector::Vector;
 use cgmath::{Vector2, Vector3};
 
+// For vector2, vector3, anything else
 pub trait Indexable {
     fn get_ak(&self, pg: &PixelGrid) -> usize;
 }
@@ -21,7 +22,7 @@ impl Indexable for Vector3<f32> {
 }
 
 pub struct ParticleIndex {
-    start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
+    pub start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
     ak2start: Vec<usize>, // for each ak, gives index aj of nbr_array, with nbrs
     ak2end: Vec<usize>, // not inclusive, like a 0..end, [a, b)
     pub neighbors: Vec<Vec<usize>>
@@ -43,8 +44,6 @@ impl ParticleIndex {
         let mut pi2ak_sorted = vec![0; x.len()];
         self.start2neighbors = (0..pi2ak.len()).collect();
         for pi in 0..x.len() {
-            // let (x, y) = pg.worldxy2xy(x[pi][0], x[pi][1]);
-            // let ak = pg.xy2ak(x, y);
             pi2ak[pi] = x[pi].get_ak(pg);
         }
         // piarr:                   [0, 1, 2, 3, 4]
@@ -72,21 +71,26 @@ impl ParticleIndex {
             }
         }
     }
-    pub fn get_nbr_slices<'a>(&'a self, pg: &PixelGrid, wx: f32, wy: f32) -> [&'a [usize]; 9] {
+    pub fn get_nbr_slices<'a>(
+        &'a self, pg: &PixelGrid, wx: f32, wy: f32
+    ) -> [&'a [usize]; 9] 
+    {
         let mut result: [&[usize]; 9] = [&[]; 9];
         let mut idx = 0;
-        for dj in -1..=1 {
-            for di in -1..=1 {
-                let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
-                if pg.out_of_bounds(wxt, wyt, 0.0) {
-                    continue;
-                }
 
-                let (x, y) = pg.worldxy2xy(wxt, wyt);
-                let ak = pg.xy2ak(x, y);
+        let (x, y) = pg.worldxy2xy(wx, wy);
+        let (i, j) = pg.xy2ij(x, y).unwrap();
+        let djmin = (j as i32 - 1).max(0) as usize;
+        let djmax = (j as i32 + 1).min(pg.n as i32 - 1) as usize;
+        let dimin = (i as i32 - 1).max(0) as usize;
+        let dimax = (i as i32 + 1).min(pg.m as i32 - 1) as usize;
+
+        for di in dimin..=dimax {
+            for dj in djmin..=djmax {
+                let ak = pg.ij2ak_nocheck(di, dj);
                 let start = self.ak2start[ak];
                 if start >= self.start2neighbors.len() {
-                    result[idx] = &[];
+                    continue;
                 } else {
                     let end = self.ak2end[ak];
                     result[idx] = &self.start2neighbors[start..end];

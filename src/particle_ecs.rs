@@ -5,7 +5,7 @@ use cgmath::{Vector2};
 ///
 /// This is easy to parallelize, has good locality, and
 /// is easier to convert to GPU than OO implementation. 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ParticleData<V: Vector<f32>> {
     pub x: Vec<V>,
     pub v: Vec<V>,
@@ -18,6 +18,7 @@ pub struct ParticleData<V: Vector<f32>> {
     pub f_body: Vec<V>,
     pub f_surface: Vec<V>,
     pub particle_type: Vec<usize>,
+    pub boundary: Vec<usize>,
     pub n_particles: usize,
     pub n_fluid_particles: usize
 }
@@ -38,6 +39,30 @@ pub struct ParticleRef<'a, V: Vector<f32>> {
 }
 
 
+pub fn reorder<V: Vector<f32>>(pdata: &mut ParticleData<V>, order: &mut Vec<usize>) {
+
+    // let mut sorted_order = order.clone();
+    // sorted_order.sort();
+    // let len = pdata.x.len();
+    // assert_eq!(order.len(), len);
+    // let expected_order: Vec<usize> = (0..len).collect();
+    // assert_eq!(sorted_order, expected_order);
+
+    pdata.x = order.iter().map(|&i| pdata.x[i]).collect();
+    pdata.v = order.iter().map(|&i| pdata.v[i]).collect();
+    pdata.a = order.iter().map(|&i| pdata.a[i]).collect();
+    pdata.pressure = order.iter().map(|&i| pdata.pressure[i]).collect();
+    pdata.density = order.iter().map(|&i| pdata.density[i]).collect();
+    pdata.mass = order.iter().map(|&i| pdata.mass[i]).collect();
+    pdata.f_pressure = order.iter().map(|&i| pdata.f_pressure[i]).collect();
+    pdata.f_viscous = order.iter().map(|&i| pdata.f_viscous[i]).collect();
+    pdata.f_body = order.iter().map(|&i| pdata.f_body[i]).collect();
+    pdata.f_surface = order.iter().map(|&i| pdata.f_surface[i]).collect();
+    pdata.particle_type = order.iter().map(|&i| pdata.particle_type[i]).collect();
+    pdata.boundary = order.iter().map(|&i| pdata.boundary[i]).collect();
+}
+
+
 impl ParticleData<Vector2<f32>> {
     pub fn new(n_particles: usize, n_fluid_particles: usize) -> Self {
         ParticleData {
@@ -52,6 +77,7 @@ impl ParticleData<Vector2<f32>> {
             f_body: vec![Vector2::new(0.0, 0.0); n_particles],
             f_surface: vec![Vector2::new(0.0, 0.0); n_particles],
             particle_type: vec![0; n_particles],
+            boundary: vec![0; n_particles],
             n_particles: n_particles,
             n_fluid_particles: n_fluid_particles
         }

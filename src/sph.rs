@@ -151,7 +151,7 @@ pub fn update_forces_ecs<V: Vector<f32>>(
     mass: &Vec<f32>, 
     particle_type: &Vec<usize>,
     pindex: &ParticleIndex,
-    n_fluid_particles: usize,
+    n_particles: usize,
     h: f32,
     mu_mat: &Vec<Vec<f32>>,
     s_mat: &Vec<Vec<f32>>,
@@ -160,15 +160,15 @@ pub fn update_forces_ecs<V: Vector<f32>>(
     nthread: usize
 ) {
 
-    let n_chunks = nthread.min(n_fluid_particles);
-    let chunk_size = n_fluid_particles / n_chunks;
+    let n_chunks = nthread.min(n_particles);
+    let chunk_size = n_particles / n_chunks;
 
     crossbeam::scope(|s| {
         for (i, (((f_pressure, f_viscous), f_surface), f_body)) in 
-            f_pressure[0..n_fluid_particles].chunks_mut(chunk_size)
-            .zip(f_viscous[0..n_fluid_particles].chunks_mut(chunk_size))
-            .zip(f_surface[0..n_fluid_particles].chunks_mut(chunk_size))
-            .zip(f_body[0..n_fluid_particles].chunks_mut(chunk_size))
+            f_pressure[0..n_particles].chunks_mut(chunk_size)
+            .zip(f_viscous[0..n_particles].chunks_mut(chunk_size))
+            .zip(f_surface[0..n_particles].chunks_mut(chunk_size))
+            .zip(f_body[0..n_particles].chunks_mut(chunk_size))
             .enumerate() 
         {
             let start = i * chunk_size;
@@ -268,7 +268,7 @@ pub fn update_pressures_ecs(
 pub fn leapfrog_update_acceleration_ecs<V: Vector<f32>>(
     pdata: &mut ParticleData<V>
 ) {
-    for k in 0..pdata.n_fluid_particles {
+    for k in 0..pdata.n_particles {
         let ftot = 
             pdata.f_pressure[k] 
             + pdata.f_body[k]
@@ -319,7 +319,7 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
         &pdata.mass,
         &pdata.particle_type,
         pindex,
-        pdata.n_fluid_particles,
+        pdata.n_particles,
         h, 
         &particle_constants.mu_mat,
         &particle_constants.s_mat,
@@ -349,10 +349,11 @@ pub fn leapfrog_ecs<V: Vector<f32> + Indexable>(
 ) {
     let t0 = Instant::now();
 
-    for k in 0..pdata_new.n_fluid_particles {
-        pdata_new.v[k] = pdata.v[k] + pdata.a[k] * dt / 2.0;
+    for k in 0..pdata_new.n_particles {
+        let bound = (1 - pdata_new.boundary[k]) as f32;
+        pdata_new.v[k] = (pdata.v[k] + pdata.a[k] * dt / 2.0) * bound;
         pdata_new.x[k] = pdata.x[k] + pdata_new.v[k] * dt;
-    } 
+    }
     
     let t1 = Instant::now();
 
@@ -366,8 +367,9 @@ pub fn leapfrog_ecs<V: Vector<f32> + Indexable>(
 
     let t3 = Instant::now();
 
-    for k in 0..pdata_new.n_fluid_particles {
-        pdata_new.v[k] += pdata_new.a[k] * dt / 2.0;
+    for k in 0..pdata_new.n_particles {
+        let bound = (1 - pdata_new.boundary[k]) as f32;
+        pdata_new.v[k] += (pdata_new.a[k] * dt / 2.0) * bound;
     } 
     let t4 = Instant::now();
     println!("\t v1: {:?}, acc {:?} forces {:?}, v1/2 {:?}", t4-t3, t3-t2, t2-t1, t1-t0);
@@ -471,7 +473,7 @@ mod tests {
             );
 
             println!("");
-            for pi in 0..pdata_new.n_fluid_particles {
+            for pi in 0..pdata_new.n_particles {
                 let rho0 = pc.rho0_vec[pdata_new.particle_type[pi]];
                 new_err += (pdata_new.density[pi] - rho0).abs()
             }    
