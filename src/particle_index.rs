@@ -50,7 +50,6 @@ impl ParticleIndex {
                 self.ak2end[*ak] = i + 1; // only do this if it's not already been set
             }
         }
-
     }
     pub fn get_nbr_slices<'a>(&'a self, pg: &PixelGrid, wx: f32, wy: f32) -> [&'a [usize]; 9] {
         let mut result: [&[usize]; 9] = [&[]; 9];
