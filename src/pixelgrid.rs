@@ -25,13 +25,13 @@ impl Default for PixelGrid {
             mnl: 100 * 100,
             dx: 1.0,
             dy: 1.0,
-            dz: 0.0,
+            dz: 1.0,
             x: 0.0,
             y: 0.0,
             z: 0.0,
             w: 100.0,
             h: 100.0,
-            d: 0.0,
+            d: 1.0,
         }
     }
 }
@@ -242,6 +242,24 @@ impl PixelGrid {
         let (x, y) = self.worldxy2xy(wx, wy);
         self.sample_bilinear(data, x, y)
     }
+
+    pub fn out_of_bounds(&self, wx: f32, wy: f32, wz: f32) -> bool {
+        if wx < self.x || wx >= self.x + self.w || 
+           wy < self.y || wy >= self.y + self.h ||
+           wz < self.z || wz >= self.z + self.d {
+            return true;
+        }
+        false
+    }
+
+    pub fn out_of_bounds_2d(&self, wx: f32, wy: f32) -> bool {
+        if wx < self.x || wx >= self.x + self.w || 
+           wy < self.y || wy >= self.y + self.h {
+            return true;
+        }
+        false
+    }
+   
 }
 
 

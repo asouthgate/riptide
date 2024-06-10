@@ -58,7 +58,7 @@ impl ParticleIndex {
         for dj in -dist..dist+1 {
             for di in -dist..dist+1 {
                 let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
-                if wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h {
+                if pg.out_of_bounds(wxt, wyt, 0.0) {
                     continue;
                 }
 
@@ -80,7 +80,7 @@ impl ParticleIndex {
         for dj in -1..=1 {
             for di in -1..=1 {
                 let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
-                if wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h {
+                if pg.out_of_bounds(wxt, wyt, 0.0) {
                     continue;
                 }
 
