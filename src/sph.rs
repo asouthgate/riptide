@@ -115,10 +115,10 @@ pub fn update_empty_test_ecs<V: Vector<f32> + Indexable>(
 /// * `pindex`
 /// * `h` - characteristic length
 pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
-    xmain: &Vec<V>,
+    x: &Vec<V>,
     mass: &Vec<f32>,
     density: &mut Vec<f32>,
-    nbrs: &Vec<Vec<usize>>,
+    pindex: &ParticleIndex,
     n_particles: usize,
     h: f32,
     pg: &PixelGrid,
@@ -128,37 +128,26 @@ pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
     let n_chunks = nthread.min(n_particles);
     let chunk_size = n_particles / n_chunks;
 
-    let _ = crossbeam::scope(|s| {
-        for (i, density) in 
-            density.chunks_mut(chunk_size)
-            .enumerate() 
-        {
-            let start = i * chunk_size;
-            let x = xmain.clone(); // Clone the x vector for each thread
-            s.spawn(move |_| {
-                for (chunk_i, densityi) in density.iter_mut().enumerate() { // ignore static particle
-                    let i = chunk_i + start;
-                    let xi = x[i];
-                    assert!(!x[i][0].is_nan());
-                    assert!(!x[i][1].is_nan());
-                    *densityi = 0.0;
-                    // let slices = pindex.get_nbr_slices(&pg, xi[0], xi[1]);
-                    // for slice in slices.iter() {
-                    //     for &j in *slice {
-                    let ak = xi.get_ak(pg);
-                    for j in &nbrs[ak] {
-                        let rij = (xi - x[*j]).magnitude();
-                        *densityi += cal_rho_ij(mass[*j], rij, h);
-                        // assert!(rij <= 2.0_f32.sqrt());
-                        assert!(mass[*j] > 0.0);
-                        assert!(!(*densityi).is_nan());
-                        // }            
-                    }
-                    assert!(*densityi > 0.0);
+    density
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(i, densityi)| {
+            let xi = x[i];
+            assert!(!x[i][0].is_nan());
+            assert!(!x[i][1].is_nan());
+            *densityi = 0.0;
+            let ak = xi.get_ak(pg);
+            let slices = pindex.get_nbr_slices(&pg, xi[0], xi[1]);
+            for slice in slices.iter() {
+                for &j in *slice {
+                let rij = (xi - x[j]).magnitude();
+                    *densityi += cal_rho_ij(mass[j], rij, h);
+                    assert!(mass[j] > 0.0);
+                    assert!(!(*densityi).is_nan());
                 }
-            });
-        }
-    });
+            }
+            assert!(*densityi > 0.0);
+        })
 }
 
 
@@ -190,91 +179,163 @@ pub fn update_forces_ecs<V: Vector<f32>>(
 
     let n_chunks = nthread.min(n_particles);
     let chunk_size = n_particles / n_chunks;
+    let c_s = (3.0 * PI) / (2.0 * h);
 
-    crossbeam::scope(|s| {
-        for (i, (((f_pressure, f_viscous), f_surface), f_body)) in 
-            f_pressure[0..n_particles].chunks_mut(chunk_size)
-            .zip(f_viscous[0..n_particles].chunks_mut(chunk_size))
-            .zip(f_surface[0..n_particles].chunks_mut(chunk_size))
-            .zip(f_body[0..n_particles].chunks_mut(chunk_size))
-            .enumerate() 
-        {
-            let start = i * chunk_size;
+    f_pressure
+        .par_iter_mut()
+        .zip(f_viscous.par_iter_mut())
+        .zip(f_surface.par_iter_mut())
+        .zip(f_body.par_iter_mut())
+        .enumerate()
+        .for_each(|(i, (((f_pressurei, f_viscousi), f_surfacei), f_bodyi))| {
+            *f_bodyi = body_force * density[i];
+            assert!(!x[i][0].is_nan());
+            assert!(!x[i][1].is_nan());
+            assert!(!f_pressurei[0].is_nan());
+            assert!(!f_pressurei[1].is_nan());
 
-            s.spawn(move |_| {
-                let c_s = (3.0 * PI) / (2.0 * h);
+            *f_pressurei *= 0.0;
+            *f_viscousi *= 0.0;
+            *f_surfacei *= 0.0;
 
-                for chunk_i in 0..f_pressure.len() { // ignore static particle
-                    let i = chunk_i + start;
-                    f_body[chunk_i] = body_force * density[i];
-                    assert!(!x[i][0].is_nan());
-                    assert!(!x[i][1].is_nan());
-                    assert!(!f_pressure[chunk_i][0].is_nan());
-                    assert!(!f_pressure[chunk_i][1].is_nan());
+            let mut f_pressure_tot = *f_pressurei * 0.0;
+            let mut f_viscous_tot = *f_viscousi * 0.0;
+            let mut f_surface_tot = *f_surfacei * 0.0;
 
-                    f_pressure[chunk_i] *= 0.0;
-                    f_viscous[chunk_i] *= 0.0;
-                    f_surface[chunk_i] *= 0.0;
-
-                    let mut f_pressure_tot = f_pressure[chunk_i].clone(); // why clone? no reference to dimensionality
-                    f_pressure_tot *= 0.0;
-                    let mut f_viscous_tot = f_pressure[chunk_i].clone();
-                    f_viscous_tot *= 0.0;
-                    let mut f_surface_tot = f_pressure[chunk_i].clone();
-                    f_surface_tot *= 0.0;
-
-                    let slices = pindex.get_nbr_slices(&pg, x[i][0], x[i][1]); // this is not agnostic to dimensionality
-                    for slice in slices.iter() {
-                        for &nbrj in *slice {
-                            if nbrj == i {
-                                continue;
-                            }
-                            let dxy: V = x[i] - x[nbrj];
-                            assert!(!dxy[0].is_nan());
-                            assert!(!dxy[1].is_nan());
-                            assert!(dxy.magnitude() > 0.0);
-                            let grad = debrun_spiky_kernel_grad_vec(dxy, h);
-                            assert!(!grad[0].is_nan());
-                            assert!(!grad[1].is_nan());
-                            assert!(i < density.len());
-                            assert!(nbrj < density.len());
-                            assert!(density[i] > 0.0);
-                            assert!(density[nbrj] > 0.0);
-                            let fij = cal_pressure_force_ij(
-                                pressure[i],
-                                pressure[nbrj],
-                                density[i],
-                                density[nbrj],
-                                mass[nbrj],
-                                grad
-                            );
-                            f_pressure_tot += fij;
-                            assert!(!fij[0].is_nan());
-                            assert!(!fij[1].is_nan());
-                            let r2 = dxy.dot(&dxy);
-                            let r = r2.sqrt();
-                            let duv = v[i] - v[nbrj];
-                            let muij: f32 = mu_mat[particle_type[i]][particle_type[nbrj]];
-                            let a: f32 = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
-                            let b: f32 = grad.dot(&duv);
-                            let c: V = dxy / r2;
-
-                            if r < h {
-                                let s = s_mat[particle_type[i]][particle_type[nbrj]];
-                                let surfaceij = dxy * (s * (c_s * r).cos() / r);
-                                f_surface_tot += surfaceij;
-                            }
-                            let viscousij = c * (muij * a * b);
-                            f_viscous_tot += viscousij;
-                        }
+            let slices = pindex.get_nbr_slices(&pg, x[i][0], x[i][1]); // this is not agnostic to dimensionality
+            for slice in slices.iter() {
+                for &nbrj in *slice {
+                    if nbrj == i {
+                        continue;
                     }
-                    f_pressure[chunk_i] = f_pressure_tot;
-                    f_viscous[chunk_i] = f_viscous_tot;
-                    f_surface[chunk_i] = f_surface_tot;
+                    let dxy: V = x[i] - x[nbrj];
+                    assert!(!dxy[0].is_nan());
+                    assert!(!dxy[1].is_nan());
+                    assert!(dxy.magnitude() > 0.0);
+                    let grad = debrun_spiky_kernel_grad_vec(dxy, h);
+                    assert!(!grad[0].is_nan());
+                    assert!(!grad[1].is_nan());
+                    assert!(i < density.len());
+                    assert!(nbrj < density.len());
+                    assert!(density[i] > 0.0);
+                    assert!(density[nbrj] > 0.0);
+                    let fij = cal_pressure_force_ij(
+                        pressure[i],
+                        pressure[nbrj],
+                        density[i],
+                        density[nbrj],
+                        mass[nbrj],
+                        grad
+                    );
+                    f_pressure_tot += fij;
+                    assert!(!fij[0].is_nan());
+                    assert!(!fij[1].is_nan());
+                    let r2 = dxy.dot(&dxy);
+                    let r = r2.sqrt();
+                    let duv = v[i] - v[nbrj];
+                    let muij: f32 = mu_mat[particle_type[i]][particle_type[nbrj]];
+                    let a: f32 = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
+                    let b: f32 = grad.dot(&duv);
+                    let c: V = dxy / r2;
+
+                    if r < h {
+                        let s = s_mat[particle_type[i]][particle_type[nbrj]];
+                        let surfaceij = dxy * (s * (c_s * r).cos() / r);
+                        f_surface_tot += surfaceij;
+                    }
+                    let viscousij = c * (muij * a * b);
+                    f_viscous_tot += viscousij;
                 }
-            });
-        }
-    }).unwrap();
+            }
+            *f_pressurei = f_pressure_tot;
+            *f_viscousi = f_viscous_tot;
+            *f_surfacei = f_surface_tot;
+    })
+
+    // crossbeam::scope(|s| {
+    //     for (i, (((f_pressure, f_viscous), f_surface), f_body)) in 
+    //         f_pressure[0..n_particles].chunks_mut(chunk_size)
+    //         .zip(f_viscous[0..n_particles].chunks_mut(chunk_size))
+    //         .zip(f_surface[0..n_particles].chunks_mut(chunk_size))
+    //         .zip(f_body[0..n_particles].chunks_mut(chunk_size))
+    //         .enumerate() 
+    //     {
+    //         let start = i * chunk_size;
+
+    //         s.spawn(move |_| {
+    //             let c_s = (3.0 * PI) / (2.0 * h);
+
+    //             for chunk_i in 0..f_pressure.len() { // ignore static particle
+    //                 let i = chunk_i + start;
+    //                 f_body[chunk_i] = body_force * density[i];
+    //                 assert!(!x[i][0].is_nan());
+    //                 assert!(!x[i][1].is_nan());
+    //                 assert!(!f_pressure[chunk_i][0].is_nan());
+    //                 assert!(!f_pressure[chunk_i][1].is_nan());
+
+    //                 f_pressure[chunk_i] *= 0.0;
+    //                 f_viscous[chunk_i] *= 0.0;
+    //                 f_surface[chunk_i] *= 0.0;
+
+    //                 let mut f_pressure_tot = f_pressure[chunk_i].clone(); // why clone? no reference to dimensionality
+    //                 f_pressure_tot *= 0.0;
+    //                 let mut f_viscous_tot = f_pressure[chunk_i].clone();
+    //                 f_viscous_tot *= 0.0;
+    //                 let mut f_surface_tot = f_pressure[chunk_i].clone();
+    //                 f_surface_tot *= 0.0;
+
+    //                 let slices = pindex.get_nbr_slices(&pg, x[i][0], x[i][1]); // this is not agnostic to dimensionality
+    //                 for slice in slices.iter() {
+    //                     for &nbrj in *slice {
+    //                         if nbrj == i {
+    //                             continue;
+    //                         }
+    //                         let dxy: V = x[i] - x[nbrj];
+    //                         assert!(!dxy[0].is_nan());
+    //                         assert!(!dxy[1].is_nan());
+    //                         assert!(dxy.magnitude() > 0.0);
+    //                         let grad = debrun_spiky_kernel_grad_vec(dxy, h);
+    //                         assert!(!grad[0].is_nan());
+    //                         assert!(!grad[1].is_nan());
+    //                         assert!(i < density.len());
+    //                         assert!(nbrj < density.len());
+    //                         assert!(density[i] > 0.0);
+    //                         assert!(density[nbrj] > 0.0);
+    //                         let fij = cal_pressure_force_ij(
+    //                             pressure[i],
+    //                             pressure[nbrj],
+    //                             density[i],
+    //                             density[nbrj],
+    //                             mass[nbrj],
+    //                             grad
+    //                         );
+    //                         f_pressure_tot += fij;
+    //                         assert!(!fij[0].is_nan());
+    //                         assert!(!fij[1].is_nan());
+    //                         let r2 = dxy.dot(&dxy);
+    //                         let r = r2.sqrt();
+    //                         let duv = v[i] - v[nbrj];
+    //                         let muij: f32 = mu_mat[particle_type[i]][particle_type[nbrj]];
+    //                         let a: f32 = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
+    //                         let b: f32 = grad.dot(&duv);
+    //                         let c: V = dxy / r2;
+
+    //                         if r < h {
+    //                             let s = s_mat[particle_type[i]][particle_type[nbrj]];
+    //                             let surfaceij = dxy * (s * (c_s * r).cos() / r);
+    //                             f_surface_tot += surfaceij;
+    //                         }
+    //                         let viscousij = c * (muij * a * b);
+    //                         f_viscous_tot += viscousij;
+    //                     }
+    //                 }
+    //                 f_pressure[chunk_i] = f_pressure_tot;
+    //                 f_viscous[chunk_i] = f_viscous_tot;
+    //                 f_surface[chunk_i] = f_surface_tot;
+    //             }
+    //         });
+    //     }
+    // }).unwrap();
 }
 
 
@@ -319,13 +380,13 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
     let t0 = Instant::now();
 
     pindex.update(pg, &pdata_new.x); // should be new
-    let nbrs = pindex.precompute_nbrs(pg, &pdata_new.x);
+    // let nbrs = pindex.precompute_nbrs(pg, &pdata_new.x);
 
     let t1 = Instant::now();
 
     // update forces
     update_densities_ecs(
-        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &nbrs, pdata.n_particles, h, pg, n_threads
+        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &pindex, pdata.n_particles, h, pg, n_threads
     );
     let t2 = Instant::now();
 
@@ -360,9 +421,9 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
         n_threads
     );
     let t4 = Instant::now();
-    update_empty_test_ecs(
-        &pdata_new.x, &nbrs, pg, n_threads
-    );
+    // update_empty_test_ecs(
+    //     &pdata_new.x, &nbrs, pg, n_threads
+    // );
     let t5 = Instant::now();
     println!("\t\t emptytest: {:?} cal forces: {:?}, pressure {:?}, density updates {:?}, pindex_update {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
 
