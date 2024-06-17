@@ -5,12 +5,22 @@ use cgmath::{Vector2, Vector3};
 // For vector2, vector3, anything else
 pub trait Indexable {
     fn get_ak(&self, pg: &PixelGrid) -> usize;
+    fn get_ijk(&self, pg: &PixelGrid) -> (usize, usize, usize);
+    fn get_n_nbr_blocks(&self) -> usize;
 }
 
 impl Indexable for Vector2<f32> {
     fn get_ak(&self, pg: &PixelGrid) -> usize {
         let (x, y) = pg.worldxy2xy(self[0], self[1]);
         pg.xy2ak(x, y)    
+    }
+    fn get_ijk(&self, pg: &PixelGrid) -> (usize, usize, usize) {
+        let (x, y) = pg.worldxy2xy(self[0], self[1]);
+        let (i, j) = pg.xy2ij(x, y).unwrap();
+        (i, j, 0)
+    }
+    fn get_n_nbr_blocks(&self) -> usize {
+        9
     }
 }
 
@@ -19,21 +29,29 @@ impl Indexable for Vector3<f32> {
         let (x, y, z) = pg.worldxyz2xyz(self[0], self[1], self[2]);
         pg.xyz2ak(x, y, z)
     }
+    fn get_ijk(&self, pg: &PixelGrid) -> (usize, usize, usize) {
+        let (x, y, z) = pg.worldxyz2xyz(self[0], self[1], self[2]);
+        pg.xyz2ijk(x, y, z).unwrap()
+    }
+    fn get_n_nbr_blocks(&self) -> usize {
+        27
+    }
 }
 
-pub struct ParticleIndex {
+pub struct ParticleIndex<'a> {
     pub start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
     ak2start: Vec<usize>, // for each ak, gives index aj of nbr_array, with nbrs
-    ak2end: Vec<usize> // not inclusive, like a 0..end, [a, b)
+    ak2end: Vec<usize>, // not inclusive, like a 0..end, [a, b)
+    pub nbrs: Vec<[&'a [usize]; 27]>, // for precomputation
 }
 
-impl ParticleIndex {
+impl<'a> ParticleIndex<'a> {
     pub fn new(pg: &PixelGrid, n_particles: usize) -> Self {
         ParticleIndex {
             ak2start: vec![0; pg.size()],
             ak2end: vec![0; pg.size()],
             start2neighbors: vec![0; n_particles],
-            // neighbors: vec![vec![]; n_particles]
+            nbrs: vec![[&[]; 27]; pg.size()]
         }
     }
     pub fn update<V>(&mut self, pg: &PixelGrid, x: &Vec<V>)
@@ -70,74 +88,57 @@ impl ParticleIndex {
             }
         }
     }
-    pub fn get_nbr_slices<'a>(
-        &'a self, pg: &PixelGrid, wx: f32, wy: f32
-    ) -> [&'a [usize]; 9] 
+    pub fn get_nbr_slices<V: Vector<f32> + Indexable>(
+        &'a self, pg: &PixelGrid, v: V
+    ) -> [&'a [usize]; 27] 
     {
-        let mut result: [&[usize]; 9] = [&[]; 9];
+        let mut result: [&[usize]; 27] = [&[]; 27];
         let mut idx = 0;
 
-        let (x, y) = pg.worldxy2xy(wx, wy);
-        let (i, j) = pg.xy2ij(x, y).unwrap();
-        let djmin = (j as i32 - 1).max(0) as usize;
-        let djmax = (j as i32 + 1).min(pg.n as i32 - 1) as usize;
-        let dimin = (i as i32 - 1).max(0) as usize;
-        let dimax = (i as i32 + 1).min(pg.m as i32 - 1) as usize;
+        // let (x, y) = pg.worldxy2xy(wx, wy);
+        // let (i, j) = pg.xy2ij(x, y).unwrap();
 
-        for di in dimin..=dimax {
-            for dj in djmin..=djmax {
-                let ak = pg.ij2ak_nocheck(di, dj);
-                let start = self.ak2start[ak];
-                if start >= self.start2neighbors.len() {
-                    continue;
-                } else {
-                    let end = self.ak2end[ak];
-                    result[idx] = &self.start2neighbors[start..end];
-                }
-                idx += 1;
-            }
-        }
-        result
-    }
-    pub fn get_nbr_vec<'a>(
-        &'a self, pg: &PixelGrid, ak0: usize
-    ) -> Vec<usize>
-    {
-        let mut result: Vec<usize> = vec![];
-
-        let i = ak0 / pg.n;
-        let j = ak0 % pg.n;
+        let (i, j, k) = v.get_ijk(pg);
 
         let djmin = (j as i32 - 1).max(0) as usize;
-        let djmax = (j as i32 + 1).min(pg.n as i32 - 1) as usize;
         let dimin = (i as i32 - 1).max(0) as usize;
+        let dkmin = (k as i32 - 1).max(0) as usize;
+
+        let djmax = (j as i32 + 1).min(pg.n as i32 - 1) as usize;
         let dimax = (i as i32 + 1).min(pg.m as i32 - 1) as usize;
-        for di in dimin..=dimax {
-            for dj in djmin..=djmax {
-                let ak = pg.ij2ak_nocheck(di, dj);
-                let start = self.ak2start[ak];
-                if start >= self.start2neighbors.len() {
-                    continue;
-                } else {
-                    let end = self.ak2end[ak];
-                    result.extend_from_slice(&self.start2neighbors[start..end]);
+        let dkmax = (k as i32 + 1).min(pg.l as i32 - 1) as usize;
+
+        for dk in dkmin..=dkmax {
+            for di in dimin..=dimax {
+                for dj in djmin..=djmax {
+                    let ak = pg.ijk2ak_nocheck(di, dj, dk);
+                    let start = self.ak2start[ak];
+                    if start >= self.start2neighbors.len() {
+                        continue;
+                    } else {
+                        let end = self.ak2end[ak];
+                        result[idx] = &self.start2neighbors[start..end];
+                    }
+                    idx += 1;
+                    if idx > v.get_n_nbr_blocks() {
+                        return result;
+                    }
                 }
             }
         }
-        assert!(result.len() > 0);
         result
     }
     pub fn precompute_nbrs<V: Vector<f32> + Indexable>(
-        &mut self, pg: &PixelGrid, x: &Vec<V>
-    ) -> Vec<Vec<usize>> {
+        &'a self, pg: &PixelGrid, x: &Vec<V>
+    ) -> Vec<[&'a [usize]; 27]> {
         // you are wasting nbr computation for each cell;
         // a cell may have 10 particles. dont recompute nbrs 10 times
         // for pi, this is the nbrs for particle i
-        let mut nbrs: Vec<Vec<usize>> = vec![vec![]; pg.size()];
+        let mut nbrs: Vec<[&'a [usize]; 27]> = vec![[&[]; 27]; pg.size()];
         for v in x {
             let ak = v.get_ak(pg);
             if nbrs[ak].len() == 0 {
-                nbrs[ak] = self.get_nbr_vec(pg, ak); 
+                nbrs[ak] = self.get_nbr_slices(&pg, *v);
             }
         }
         nbrs
@@ -170,7 +171,7 @@ mod tests {
         for i in 0..pg.m {
             for j in 0..pg.n {
                 println!("{} {}: ", i, j);
-                let nbrs: Vec<usize> = index.get_nbr_slices(&pg, i as f32, j as f32)
+                let nbrs: Vec<usize> = index.get_nbr_slices(&pg, Vector2::<f32>::new(i as f32, j as f32))
                     .iter().flat_map(|&inner| inner.iter().cloned()).collect();
                 println!("{:?}", nbrs);
                 assert!(nbrs.len() >= 4);
@@ -192,7 +193,7 @@ mod tests {
 
         pdata.x[0] = Vector2::<f32>::new(-5.0, -5.0);
         index.update(&pg, &pdata.x);
-        let mut pre_nbrs = index.precompute_nbrs(&pg, &pdata.x);
+        let pre_nbrs = index.precompute_nbrs(&pg, &pdata.x);
         assert!(pre_nbrs[0].len() > 0);
     }
     #[test]
@@ -213,29 +214,29 @@ mod tests {
         index.update(&pg, &pdata.x);
         let mut pre_nbrs = index.precompute_nbrs(&pg, &pdata.x);
 
-        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, -5.0, -5.0)
+        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, Vector2::<f32>::new(-5.0, -5.0))
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         println!("{} {}: {:?} ", -5.0, -5.0, nbrs);
         assert!(nbrs.len() == 4);
         assert!(nbrs == vec![0, 1, 10, 11]);
         let (x, y) = pg.worldxy2xy(-5.0, -5.0);
-        let mut ak = pg.xy2ak(x, y);
+        let ak = pg.xy2ak(x, y);
         assert!(nbrs == pre_nbrs[ak]);
         println!("??{:?}", pre_nbrs[ak]);
 
-        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, -5.0, -4.0)
+        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, Vector2::<f32>::new(-5.0, -4.0))
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         println!("{} {}: {:?}", -5.0, -4.0, nbrs);
         assert!(nbrs.len() == 6);
         assert!(nbrs == vec![0, 1, 10, 11, 20, 21]);
 
-        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, -4.0, -5.0)
+        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, Vector2::<f32>::new(-4.0, -5.0))
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         println!("{} {}: {:?}", -4.0, -5.0, nbrs);
         assert!(nbrs.len() == 6);
         assert!(nbrs == vec![0, 1, 2, 10, 11, 12]);
 
-        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, -4.0, -4.0)
+        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, Vector2::<f32>::new(-4.0, -4.0))
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         println!("{} {}: {:?}", -4.0, -4.0, nbrs);
         assert!(nbrs.len() == 9);
@@ -246,7 +247,7 @@ mod tests {
         index.update(&pg, &pdata.x);
         pre_nbrs = index.precompute_nbrs(&pg, &pdata.x);
 
-        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, 0.5, 0.5)
+        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, Vector2::<f32>::new(0.5, 0.5))
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         assert!(nbrs.len() == 10);
         println!("{} {}: {:?}", 0.5, 0.5, nbrs);
@@ -255,13 +256,13 @@ mod tests {
             println!("{:?}", nbrlist);
         }
 
-        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, 1.5, 1.5)
+        let nbrs: Vec<usize> = index.get_nbr_slices(&pg, Vector2::<f32>::new(1.5, 1.5))
             .iter().flat_map(|&inner| inner.iter().cloned()).collect();
         assert!(nbrs.len() == 10);
         println!("{} {}: {:?}", 1.5, 1.5, nbrs);
         assert!(nbrs.contains(&0));
         let (x, y) = pg.worldxy2xy(1.5, 1.5);
-        let mut ak = pg.xy2ak(x, y);
+        let ak = pg.xy2ak(x, y);
         println!("{}", ak);
         println!("??{:?}", pre_nbrs[ak]);
         println!("??{:?}", nbrs);

@@ -86,21 +86,18 @@ fn cal_pressure_force_ij<V: Vector<f32>>(pi: f32, pj: f32, rhoi: f32, rhoj: f32,
 
 pub fn update_empty_test_ecs<V: Vector<f32> + Indexable>(
     x: &Vec<V>,
-    nbrs: &Vec<Vec<usize>>,
+    pindex: &ParticleIndex,
     pg: &PixelGrid,
-    nthread: usize
 ) {
-
-    let n_chunks = nthread.min(x.len());
-    let chunk_size = x.len() / n_chunks;
-
     x
         .par_iter()
         .enumerate()
         .for_each(|(i, xi)| {
             let ak = xi.get_ak(pg);
-            for j in &nbrs[ak] {
-
+            for slice in &pindex.nbrs[ak] {
+                for j in slice.iter() {
+                    let _k = (i + *j) as f32;
+                }
             }
         })
 }
@@ -119,15 +116,9 @@ pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
     mass: &Vec<f32>,
     density: &mut Vec<f32>,
     pindex: &ParticleIndex,
-    n_particles: usize,
     h: f32,
     pg: &PixelGrid,
-    nthread: usize
 ) {
-
-    let n_chunks = nthread.min(n_particles);
-    let chunk_size = n_particles / n_chunks;
-
     density
         .par_iter_mut()
         .enumerate()
@@ -137,7 +128,7 @@ pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
             assert!(!x[i][1].is_nan());
             *densityi = 0.0;
             let ak = xi.get_ak(pg);
-            let slices = pindex.get_nbr_slices(&pg, xi[0], xi[1]);
+            let slices = pindex.get_nbr_slices(&pg, xi);
             for slice in slices.iter() {
                 for &j in *slice {
                 let rij = (xi - x[j]).magnitude();
@@ -156,7 +147,7 @@ pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
 /// * `particle_data`
 /// * `pindex`
 /// * `h` - characteristic length
-pub fn update_forces_ecs<V: Vector<f32>>(
+pub fn update_forces_ecs<V: Vector<f32> + Indexable>(
     x: &Vec<V>, // todo, just pass in struct and use fields
     v: &Vec<V>,
     f_pressure: &mut Vec<V>,
@@ -168,17 +159,13 @@ pub fn update_forces_ecs<V: Vector<f32>>(
     mass: &Vec<f32>, 
     particle_type: &Vec<usize>,
     pindex: &ParticleIndex,
-    n_particles: usize,
     h: f32,
     mu_mat: &Vec<Vec<f32>>,
     s_mat: &Vec<Vec<f32>>,
     body_force: V,
     pg: &PixelGrid,
-    nthread: usize
 ) {
 
-    let n_chunks = nthread.min(n_particles);
-    let chunk_size = n_particles / n_chunks;
     let c_s = (3.0 * PI) / (2.0 * h);
 
     f_pressure
@@ -202,8 +189,11 @@ pub fn update_forces_ecs<V: Vector<f32>>(
             let mut f_viscous_tot = *f_viscousi * 0.0;
             let mut f_surface_tot = *f_surfacei * 0.0;
 
-            let slices = pindex.get_nbr_slices(&pg, x[i][0], x[i][1]); // this is not agnostic to dimensionality
-            for slice in slices.iter() {
+            let slices = pindex.get_nbr_slices(&pg, x[i]);
+            for (si, slice) in slices.iter().enumerate() {
+                if si > x[i].get_n_nbr_blocks() {
+                    break;
+                }
                 for &nbrj in *slice {
                     if nbrj == i {
                         continue;
@@ -251,91 +241,6 @@ pub fn update_forces_ecs<V: Vector<f32>>(
             *f_viscousi = f_viscous_tot;
             *f_surfacei = f_surface_tot;
     })
-
-    // crossbeam::scope(|s| {
-    //     for (i, (((f_pressure, f_viscous), f_surface), f_body)) in 
-    //         f_pressure[0..n_particles].chunks_mut(chunk_size)
-    //         .zip(f_viscous[0..n_particles].chunks_mut(chunk_size))
-    //         .zip(f_surface[0..n_particles].chunks_mut(chunk_size))
-    //         .zip(f_body[0..n_particles].chunks_mut(chunk_size))
-    //         .enumerate() 
-    //     {
-    //         let start = i * chunk_size;
-
-    //         s.spawn(move |_| {
-    //             let c_s = (3.0 * PI) / (2.0 * h);
-
-    //             for chunk_i in 0..f_pressure.len() { // ignore static particle
-    //                 let i = chunk_i + start;
-    //                 f_body[chunk_i] = body_force * density[i];
-    //                 assert!(!x[i][0].is_nan());
-    //                 assert!(!x[i][1].is_nan());
-    //                 assert!(!f_pressure[chunk_i][0].is_nan());
-    //                 assert!(!f_pressure[chunk_i][1].is_nan());
-
-    //                 f_pressure[chunk_i] *= 0.0;
-    //                 f_viscous[chunk_i] *= 0.0;
-    //                 f_surface[chunk_i] *= 0.0;
-
-    //                 let mut f_pressure_tot = f_pressure[chunk_i].clone(); // why clone? no reference to dimensionality
-    //                 f_pressure_tot *= 0.0;
-    //                 let mut f_viscous_tot = f_pressure[chunk_i].clone();
-    //                 f_viscous_tot *= 0.0;
-    //                 let mut f_surface_tot = f_pressure[chunk_i].clone();
-    //                 f_surface_tot *= 0.0;
-
-    //                 let slices = pindex.get_nbr_slices(&pg, x[i][0], x[i][1]); // this is not agnostic to dimensionality
-    //                 for slice in slices.iter() {
-    //                     for &nbrj in *slice {
-    //                         if nbrj == i {
-    //                             continue;
-    //                         }
-    //                         let dxy: V = x[i] - x[nbrj];
-    //                         assert!(!dxy[0].is_nan());
-    //                         assert!(!dxy[1].is_nan());
-    //                         assert!(dxy.magnitude() > 0.0);
-    //                         let grad = debrun_spiky_kernel_grad_vec(dxy, h);
-    //                         assert!(!grad[0].is_nan());
-    //                         assert!(!grad[1].is_nan());
-    //                         assert!(i < density.len());
-    //                         assert!(nbrj < density.len());
-    //                         assert!(density[i] > 0.0);
-    //                         assert!(density[nbrj] > 0.0);
-    //                         let fij = cal_pressure_force_ij(
-    //                             pressure[i],
-    //                             pressure[nbrj],
-    //                             density[i],
-    //                             density[nbrj],
-    //                             mass[nbrj],
-    //                             grad
-    //                         );
-    //                         f_pressure_tot += fij;
-    //                         assert!(!fij[0].is_nan());
-    //                         assert!(!fij[1].is_nan());
-    //                         let r2 = dxy.dot(&dxy);
-    //                         let r = r2.sqrt();
-    //                         let duv = v[i] - v[nbrj];
-    //                         let muij: f32 = mu_mat[particle_type[i]][particle_type[nbrj]];
-    //                         let a: f32 = 4.0 * mass[nbrj] / (density[nbrj] * density[i]);
-    //                         let b: f32 = grad.dot(&duv);
-    //                         let c: V = dxy / r2;
-
-    //                         if r < h {
-    //                             let s = s_mat[particle_type[i]][particle_type[nbrj]];
-    //                             let surfaceij = dxy * (s * (c_s * r).cos() / r);
-    //                             f_surface_tot += surfaceij;
-    //                         }
-    //                         let viscousij = c * (muij * a * b);
-    //                         f_viscous_tot += viscousij;
-    //                     }
-    //                 }
-    //                 f_pressure[chunk_i] = f_pressure_tot;
-    //                 f_viscous[chunk_i] = f_viscous_tot;
-    //                 f_surface[chunk_i] = f_surface_tot;
-    //             }
-    //         });
-    //     }
-    // }).unwrap();
 }
 
 
@@ -380,13 +285,13 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
     let t0 = Instant::now();
 
     pindex.update(pg, &pdata_new.x); // should be new
-    // let nbrs = pindex.precompute_nbrs(pg, &pdata_new.x);
+    let nbrs = pindex.precompute_nbrs(pg, &pdata_new.x);
 
     let t1 = Instant::now();
 
     // update forces
     update_densities_ecs(
-        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &pindex, pdata.n_particles, h, pg, n_threads
+        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &pindex, h, pg
     );
     let t2 = Instant::now();
 
@@ -412,18 +317,16 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
         &pdata.mass,
         &pdata.particle_type,
         pindex,
-        pdata.n_particles,
         h, 
         &particle_constants.mu_mat,
         &particle_constants.s_mat,
         particle_constants.body_force,
         pg,
-        n_threads
     );
     let t4 = Instant::now();
-    // update_empty_test_ecs(
-    //     &pdata_new.x, &nbrs, pg, n_threads
-    // );
+    update_empty_test_ecs(
+        &pdata_new.x, pindex, pg
+    );
     let t5 = Instant::now();
     println!("\t\t emptytest: {:?} cal forces: {:?}, pressure {:?}, density updates {:?}, pindex_update {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
 
