@@ -84,25 +84,6 @@ fn cal_pressure_force_ij<V: Vector<f32>>(pi: f32, pj: f32, rhoi: f32, rhoj: f32,
 }
 
 
-pub fn update_empty_test_ecs<V: Vector<f32> + Indexable>(
-    x: &Vec<V>,
-    pindex: &ParticleIndex,
-    pg: &PixelGrid,
-) {
-    x
-        .par_iter()
-        .enumerate()
-        .for_each(|(i, xi)| {
-            let ak = xi.get_ak(pg);
-            for slice in &pindex.nbrs[ak] {
-                for j in slice.iter() {
-                    let _k = (i + *j) as f32;
-                }
-            }
-        })
-}
-
-
 // Update particle densities.
 //
 // This function takes a vector of particles, and for a given particle
@@ -115,7 +96,7 @@ pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
     x: &Vec<V>,
     mass: &Vec<f32>,
     density: &mut Vec<f32>,
-    pindex: &ParticleIndex,
+    nbrs: &Vec<[&[usize]; 27]>,
     h: f32,
     pg: &PixelGrid,
 ) {
@@ -128,7 +109,8 @@ pub fn update_densities_ecs<V: Vector<f32> + Indexable>(
             assert!(!x[i][1].is_nan());
             *densityi = 0.0;
             let ak = xi.get_ak(pg);
-            let slices = pindex.get_nbr_slices(&pg, xi);
+            // let slices = pindex.get_nbr_slices(&pg, xi);
+            let slices = nbrs[ak];
             for slice in slices.iter() {
                 for &j in *slice {
                 let rij = (xi - x[j]).magnitude();
@@ -158,7 +140,7 @@ pub fn update_forces_ecs<V: Vector<f32> + Indexable>(
     density: &Vec<f32>, 
     mass: &Vec<f32>, 
     particle_type: &Vec<usize>,
-    pindex: &ParticleIndex,
+    nbrs: &Vec<[&[usize]; 27]>,
     h: f32,
     mu_mat: &Vec<Vec<f32>>,
     s_mat: &Vec<Vec<f32>>,
@@ -189,7 +171,11 @@ pub fn update_forces_ecs<V: Vector<f32> + Indexable>(
             let mut f_viscous_tot = *f_viscousi * 0.0;
             let mut f_surface_tot = *f_surfacei * 0.0;
 
-            let slices = pindex.get_nbr_slices(&pg, x[i]);
+            let ak = x[i].get_ak(pg);
+            // let slices = pindex.get_nbr_slices(&pg, xi);
+            let slices = nbrs[ak];
+
+            // let slices = pindex.get_nbr_slices(&pg, x[i]);
             for (si, slice) in slices.iter().enumerate() {
                 if si > x[i].get_n_nbr_blocks() {
                     break;
@@ -291,7 +277,7 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
 
     // update forces
     update_densities_ecs(
-        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &pindex, h, pg
+        &pdata_new.x, &pdata.mass, &mut pdata_new.density, &nbrs, h, pg
     );
     let t2 = Instant::now();
 
@@ -316,7 +302,7 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
         &pdata_new.density,
         &pdata.mass,
         &pdata.particle_type,
-        pindex,
+        &nbrs, 
         h, 
         &particle_constants.mu_mat,
         &particle_constants.s_mat,
@@ -324,11 +310,7 @@ pub fn leapfrog_cal_forces_ecs<V: Vector<f32> + Indexable>(
         pg,
     );
     let t4 = Instant::now();
-    update_empty_test_ecs(
-        &pdata_new.x, pindex, pg
-    );
-    let t5 = Instant::now();
-    println!("\t\t emptytest: {:?} cal forces: {:?}, pressure {:?}, density updates {:?}, pindex_update {:?}", t5-t4, t4-t3, t3-t2, t2-t1, t1-t0);
+    println!("\t\t cal forces: {:?}, pressure {:?}, density updates {:?}, pindex_update {:?}", t4-t3, t3-t2, t2-t1, t1-t0);
 
 }
 
