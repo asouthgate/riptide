@@ -16,6 +16,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Install Clippy
+      run: rustup component add clippy
+
     - name: Lint
       run: cargo clippy
 
