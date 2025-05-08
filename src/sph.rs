@@ -56,8 +56,7 @@ fn cal_pressure(rho: f32, rho0: f32, k: f32) -> f32 {
 fn cal_pressure_wcsph(rho: f32, rho0: f32, c2: f32, gamma: f32) -> f32 {
     // TODO: inefficient; bweak is const
     let bweak = c2 * rho0 / gamma;
-    let result = bweak * ((rho/rho0).powf(gamma) - 1.0);
-    result
+    bweak * ((rho/rho0).powf(gamma) - 1.0)
 }
 
 /// Calculate the jth density contribution for particle i.
@@ -93,9 +92,9 @@ fn cal_pressure_force_ij(pi: f32, pj: f32, rhoi: f32, rhoj: f32, mj: f32, gradw:
 /// * `pindex`
 /// * `h` - characteristic length
 pub fn update_densities_ecs(
-    x: &Vec<(f32, f32)>,
-    mass: &Vec<f32>,
-    density: &mut Vec<f32>,
+    x: &[(f32, f32)],
+    mass: &[f32],
+    density: &mut [f32],
     pindex: &ParticleIndex,
     n_particles: usize,
     h: f32,
@@ -113,21 +112,21 @@ pub fn update_densities_ecs(
         {
             let start = i * chunk_size;
             s.spawn(move |_| {
-                for chunk_i in 0..density.len() { // ignore static particle
+                for (chunk_i, densityi) in density.iter_mut().enumerate()  { // ignore static particle
                     let i = chunk_i + start;
                     assert!(!x[i].0.is_nan());
                     assert!(!x[i].1.is_nan());            
-                    density[chunk_i] = 0.0;
-                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
+                    *densityi = 0.0;
+                    let slices = pindex.get_nbrs_nine_slice(pg, x[i].0, x[i].1);
                     for slice in slices.iter() {
                         for &j in *slice {
                             let rij = cal_dist(x[i], x[j]);
                             let contrib = cal_rho_ij(mass[j], rij, h);
-                            density[chunk_i] += contrib; 
-                            assert!(!density[chunk_i].is_nan());
+                            *densityi += contrib; 
+                            assert!(!densityi.is_nan());
                         }            
                     }
-                    assert!(density[chunk_i] > 0.0);
+                    assert!(*densityi > 0.0);
                 }
             });
         }
@@ -143,21 +142,21 @@ pub fn update_densities_ecs(
 /// * `pindex`
 /// * `h` - characteristic length
 pub fn update_forces_ecs(
-    x: &Vec<(f32, f32)>, 
-    v: &Vec<(f32, f32)>,
-    f_pressure: &mut Vec<(f32, f32)>, 
-    f_viscous: &mut Vec<(f32, f32)>,
-    f_surface: &mut Vec<(f32, f32)>,
-    f_body: &mut Vec<(f32, f32)>,
-    pressure: &Vec<f32>, 
-    density: &Vec<f32>, 
-    mass: &Vec<f32>, 
-    particle_type: &Vec<usize>,
+    x: &[(f32, f32)], 
+    v: &[(f32, f32)],
+    f_pressure: &mut [(f32, f32)], 
+    f_viscous: &mut [(f32, f32)],
+    f_surface: &mut [(f32, f32)],
+    f_body: &mut [(f32, f32)],
+    pressure: &[f32], 
+    density: &[f32], 
+    mass: &[f32], 
+    particle_type: &[usize],
     pindex: &ParticleIndex,
     n_fluid_particles: usize,
     h: f32,
-    mu_mat: &Vec<Vec<f32>>,
-    s_mat: &Vec<Vec<f32>>,
+    mu_mat: &[Vec<f32>],
+    s_mat: &[Vec<f32>],
     body_force: (f32, f32),
     pg: &PixelGrid,
     nthread: usize
@@ -193,7 +192,7 @@ pub fn update_forces_ecs(
                     let mut f_viscous_tot = (0.0, 0.0);
                     let mut f_surface_tot = (0.0, 0.0);
 
-                    let slices = pindex.get_nbrs_nine_slice(&pg, x[i].0, x[i].1);
+                    let slices = pindex.get_nbrs_nine_slice(pg, x[i].0, x[i].1);
                     for slice in slices.iter() {
                         for &nbrj in *slice {
                             if nbrj == i {
@@ -253,12 +252,12 @@ pub fn update_forces_ecs(
 
 
 pub fn update_pressures_ecs(
-    pressure: &mut Vec<f32>,
-    density: &Vec<f32>,
-    particle_type: &Vec<usize>,
+    pressure: &mut [f32],
+    density: &[f32],
+    particle_type: &[usize],
     n_particles: usize,
-    rho0_vec: &Vec<f32>, 
-    c2_vec: &Vec<f32>,
+    rho0_vec: &[f32], 
+    c2_vec: &[f32],
 ) {
     for k in 0..n_particles {
         let pk = particle_type[k];
@@ -269,8 +268,8 @@ pub fn update_pressures_ecs(
 
 
 pub fn update_body_forces_ecs(
-    f_body: &mut Vec<(f32, f32)>,
-    density: &Vec<f32>,
+    f_body: &mut [(f32, f32)],
+    density: &[f32],
     n_fluid_particles: usize,
     body_force: (f32, f32)
 ) {
