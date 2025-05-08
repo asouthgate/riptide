@@ -64,28 +64,7 @@ impl ParticleIndex {
         }
 
     }
-    // TODO: deprecated in favour of 1D case
-    pub fn get_nbrs(&self, pg: &PixelGrid, wx: f32, wy: f32, dist: i32) -> Vec<usize> {
-        let mut result = vec![];
-        for dj in -dist..dist+1 {
-            for di in -dist..dist+1 {
-                let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
-                if wxt < pg.x || wxt >= pg.x + pg.w || wyt < pg.y || wyt >= pg.y + pg.h {
-                    continue;
-                }
-
-                let (x, y) = pg.worldxy2xy(wxt, wyt);
-                let ak = pg.xy2ak(x, y);
-                let start = self.ak2start[ak];
-                let end = self.ak2end[ak];
-                for k in start..end {
-                    let nbrj = self.start2neighbors[k];
-                    result.push(nbrj);
-                }
-            }
-        }
-        result
-    }
+    // TODO: extend to allow more than 9 slices
     /// For a given world-space position, and a grid, get all 9 neighbors in adjacent cells
     ///
     /// # Arguments
@@ -98,6 +77,7 @@ impl ParticleIndex {
     pub fn get_nbrs_nine_slice<'a>(&'a self, pg: &PixelGrid, wx: f32, wy: f32) -> [&'a [usize]; 9] {
         let mut result: [&[usize]; 9] = [&[]; 9];
         let mut idx = 0;
+        // TODO: inefficient? make a const array 
         for dj in -1..=1 {
             for di in -1..=1 {
                 let (wxt, wyt) = (wx + di as f32, wy + dj as f32);
@@ -119,13 +99,9 @@ impl ParticleIndex {
         }
         result
     }
-    /// Recalculate the neighbors given an array of positions x
-    pub fn update_neighbors(&mut self, pg: &PixelGrid, x: &[(f32, f32)], dist: i32) {
-        for (pi, xpi) in x.iter().enumerate() {
-            self.neighbors[pi].clear();
-            let nbrs = self.get_nbrs(pg, xpi.0, xpi.1, dist);
-            self.neighbors[pi] = nbrs;
-        }
+    pub fn get_nbrs(&self, pg: &PixelGrid, wx: f32, wy: f32) -> Vec<usize> {
+        let slices = self.get_nbrs_nine_slice(pg, wx, wy);      
+        slices.iter().flat_map(|slice| slice.iter().copied()).collect()
     }
 }
 
@@ -154,7 +130,7 @@ mod tests {
         for i in 0..pg.m {
             for j in 0..pg.n {
                 println!("{} {}: ", i, j);
-                let nbrs = index.get_nbrs(&pg, i as f32, j as f32, 1);
+                let nbrs: Vec<usize> = index.get_nbrs(&pg, i as f32, j as f32);
                 println!("{:?}", nbrs);
                 assert!(nbrs.len() >= 4);
                 assert!(nbrs.len() <= 9);
@@ -181,25 +157,25 @@ mod tests {
         }
         let mut index = ParticleIndex::new(&pg, n_particles);
         index.update(&pg, &pdata.x);
-        index.update_neighbors(&pg, &pdata.x, 1);
+        // index.update_neighbors(&pg, &pdata.x, 1);
 
-        let nbrs = index.get_nbrs(&pg, -5.0, -5.0, 1);
-        println!("{} {}: {:?} {:?}", -5.0, -5.0, nbrs, index.neighbors[0]);
+        let nbrs = index.get_nbrs(&pg, -5.0, -5.0);
+        // println!("{} {}: {:?} {:?}", -5.0, -5.0, nbrs, index.neighbors[0]);
         assert!(nbrs.len() == 4);
         assert!(nbrs == vec![0, 1, 10, 11]);
-        assert!(nbrs == index.neighbors[0]);
+        // assert!(nbrs == index.neighbors[0]);
 
-        let nbrs = index.get_nbrs(&pg, -5.0, -4.0, 1);
+        let nbrs = index.get_nbrs(&pg, -5.0, -4.0);
         println!("{} {}: {:?}", -5.0, -4.0, nbrs);
         assert!(nbrs.len() == 6);
         assert!(nbrs == vec![0, 1, 10, 11, 20, 21]);
 
-        let nbrs = index.get_nbrs(&pg, -4.0, -5.0, 1);
+        let nbrs: Vec<usize> = index.get_nbrs(&pg, -4.0, -5.0);
         println!("{} {}: {:?}", -4.0, -5.0, nbrs);
         assert!(nbrs.len() == 6);
         assert!(nbrs == vec![0, 1, 2, 10, 11, 12]);
 
-        let nbrs = index.get_nbrs(&pg, -4.0, -4.0, 1);
+        let nbrs: Vec<usize> = index.get_nbrs(&pg, -4.0, -4.0);
         println!("{} {}: {:?}", -4.0, -4.0, nbrs);
         assert!(nbrs.len() == 9);
         assert!(nbrs == vec![0, 1, 2, 10, 11, 12, 20, 21, 22]);
@@ -207,14 +183,14 @@ mod tests {
         // now, move one of the particles to the middle
         pdata.x[0] = (0.5, 0.5);
         index.update(&pg, &pdata.x);
-        index.update_neighbors(&pg, &pdata.x, 1);
+        // index.update_neighbors(&pg, &pdata.x, 1);
 
-        let nbrs = index.get_nbrs(&pg, 0.5, 0.5, 1);
+        let nbrs: Vec<usize> = index.get_nbrs(&pg, 0.5, 0.5);
         assert!(nbrs.len() == 10);
         println!("{} {}: {:?}", 0.5, 0.5, nbrs);
         assert!(nbrs.contains(&0));
 
-        let nbrs = index.get_nbrs(&pg, 1.5, 1.5, 1);
+        let nbrs: Vec<usize> = index.get_nbrs(&pg, 1.5, 1.5);
         assert!(nbrs.len() == 10);
         println!("{} {}: {:?}", 1.5, 1.5, nbrs);
         assert!(nbrs.contains(&0));
