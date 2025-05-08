@@ -49,8 +49,8 @@ impl ParticleData {
             f_body: vec![(0.0, 0.0); n_particles],
             f_surface: vec![(0.0, 0.0); n_particles],
             particle_type: vec![0; n_particles],
-            n_particles: n_particles,
-            n_fluid_particles: n_fluid_particles
+            n_particles,
+            n_fluid_particles
         }
     }
     pub fn get_particle_ref(&mut self, pid: usize) -> ParticleRef {

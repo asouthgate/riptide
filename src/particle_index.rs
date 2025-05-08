@@ -7,10 +7,12 @@ pub struct ParticleIndex {
     start2neighbors: Vec<usize>, // an array with particle indices, implicitly sorted into bins
     ak2start: Vec<usize>, // for each ak, gives index aj of nbr_array, with nbrs
     ak2end: Vec<usize>, // not inclusive, like a 0..end, [a, b)
+    // TODO: deprecated in favour of 1D case
     pub neighbors: Vec<Vec<usize>>
 }
 
 impl ParticleIndex {
+    // TODO: reference to pg should be baked in 
     pub fn new(pg: &PixelGrid, n_particles: usize) -> Self {
         ParticleIndex {
             ak2start: vec![0; pg.m * pg.n],
@@ -19,7 +21,15 @@ impl ParticleIndex {
             neighbors: vec![vec![]; n_particles]
         }
     }
-    pub fn update(&mut self, pg: &PixelGrid, x: &Vec<(f32, f32)>) {
+    /// Update the index given an array of positions
+    ///
+    /// # Arguments
+    ///
+    /// * `pg` - A PixelGrid defining a 2D manifold
+    ///
+    /// * `x` - An array of 2D positions
+    ///
+    pub fn update(&mut self, pg: &PixelGrid, x: &[(f32, f32)]) {
         let mut pi2ak = vec![0; x.len()];
         let mut pi2ak_sorted = vec![0; x.len()];
         self.start2neighbors = (0..pi2ak.len()).collect();
@@ -54,7 +64,7 @@ impl ParticleIndex {
         }
 
     }
-    // TODO: deprecated
+    // TODO: deprecated in favour of 1D case
     pub fn get_nbrs(&self, pg: &PixelGrid, wx: f32, wy: f32, dist: i32) -> Vec<usize> {
         let mut result = vec![];
         for dj in -dist..dist+1 {
@@ -76,6 +86,15 @@ impl ParticleIndex {
         }
         result
     }
+    /// For a given world-space position, and a grid, get all 9 neighbors in adjacent cells
+    ///
+    /// # Arguments
+    ///
+    /// * `pg` - PixelGrid defining 2D manifold
+    ///
+    /// * `wx` - x position in world space
+    /// 
+    /// * `wy` - y position in world space
     pub fn get_nbrs_nine_slice<'a>(&'a self, pg: &PixelGrid, wx: f32, wy: f32) -> [&'a [usize]; 9] {
         let mut result: [&[usize]; 9] = [&[]; 9];
         let mut idx = 0;
@@ -100,10 +119,11 @@ impl ParticleIndex {
         }
         result
     }
-    pub fn update_neighbors(&mut self, pg: &PixelGrid, x: &Vec<(f32, f32)>, dist: i32) {
-        for pi in 0..x.len() {
+    /// Recalculate the neighbors given an array of positions x
+    pub fn update_neighbors(&mut self, pg: &PixelGrid, x: &[(f32, f32)], dist: i32) {
+        for (pi, xpi) in x.iter().enumerate() {
             self.neighbors[pi].clear();
-            let nbrs = self.get_nbrs(pg, x[pi].0, x[pi].1, dist);
+            let nbrs = self.get_nbrs(pg, xpi.0, xpi.1, dist);
             self.neighbors[pi] = nbrs;
         }
     }

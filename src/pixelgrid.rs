@@ -46,7 +46,7 @@ impl PixelGrid {
         }
     }
 
-    pub fn print_data(&self, data: &Vec<f32>) {
+    pub fn print_data(&self, data: &[f32]) {
         let prec = 3;
         let underscores = "-".repeat(( 2 + prec + 1) * self.n);
         println!("-{}", underscores);
@@ -61,16 +61,35 @@ impl PixelGrid {
         println!("-{}", underscores);
     }
 
-    pub fn sample_world(&self, data: &Vec<f32>, wx: f32, wy: f32) -> f32 {
+    // TODO: it should be clearer what method this function uses for sampling
+    /// Sample some data given world space coordinates
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Float data of any kind
+    ///
+    /// * `wx` - world space x position
+    ///
+    /// * `wy` world space y position
+    pub fn sample_world(&self, data: &[f32], wx: f32, wy: f32) -> f32 {
         let (x, y) = self.worldxy2xy(wx, wy);
         self.sample(data, x, y)
     }
 
-    pub fn sample(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
+    pub fn sample(&self, data: &[f32], x: f32, y: f32) -> f32 {
         data[self.xy2ak(x, y)]
     }
 
-    pub fn sample_bilinear(&self, data: &Vec<f32>, x: f32, y: f32) -> f32 {
+    /// Sample some data using bilinear interpolation
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Float data of any kind
+    ///
+    /// * `x` - x position
+    ///
+    /// * `y` - y position
+    pub fn sample_bilinear(&self, data: &[f32], x: f32, y: f32) -> f32 {
         let xul = x.floor();
         let yul = y.floor() + 1.0;
         let xur = x.floor() + 1.0;
@@ -91,11 +110,10 @@ impl PixelGrid {
         let fxy1 = ( data[akbl] * (1.0 - dx) ) + ( data[akbr] * dx );  // recall dx is 1, so we don't divide by width
         let fxy2 = ( data[akul] * (1.0 - dx) ) + ( data[akur] * dx );  // recall dx is 1, so we don't divide by width
 
-        let fxy = fxy1 * (1.0 - dy) + fxy2 * dy;
-        return fxy;
+        fxy1 * (1.0 - dy) + fxy2 * dy
     }
 
-    pub fn sample_bilinear_world(&self, data: &Vec<f32>, wx: f32, wy: f32) -> f32 {
+    pub fn sample_bilinear_world(&self, data: &[f32], wx: f32, wy: f32) -> f32 {
         let (x, y) = self.worldxy2xy(wx, wy);
         self.sample_bilinear(data, x, y)
     }

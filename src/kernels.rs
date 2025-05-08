@@ -10,7 +10,7 @@
 //!
 
 
-const PI: f32 = 3.141592653589793;
+const PI: f32 = std::f32::consts::PI;
 
 
 /// A constant (depending on h)
@@ -26,7 +26,7 @@ pub fn cubic_spline_2d_kernel(r: f32, h: f32) -> f32 {
         _q if _q > 1.0 => 0.25 * (2.0 - q).powi(3),
         _ => 1.0 - 1.5 * q.powi(2) * (1.0 - 0.5 * q)
     };
-    return norm * fq;
+    norm * fq
 }
 
 fn cubic_spline_2d_kernel_dwdq(r: f32, h: f32) -> f32 {
@@ -37,7 +37,7 @@ fn cubic_spline_2d_kernel_dwdq(r: f32, h: f32) -> f32 {
         _q if _q > 1.0 => -0.75 * (2.0 - q).powi(2),
         _ => - 3.0 * q * (1.0 - 0.75 * q)
     };
-    return norm * fq;
+    norm * fq
 }
 
 pub fn cubic_spline_2d_grad(dx: f32, dy: f32, r: f32, h: f32) -> (f32, f32) {
