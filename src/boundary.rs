@@ -1,66 +1,65 @@
 use crate::pixelgrid::PixelGrid;
-use crate::particle::Particle;
 use crate::particle_ecs::ParticleData;
 
 
-pub fn get_ghost_box(pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i32) -> Vec<Particle> {
-    let mut res = vec![];
-    for i in i0..ie {
-        res.push(Particle{
-            position: (j0 as f32, i as f32),
-            mass: mass,
-            .. Default::default()
-        });
-        res.push(Particle{
-            position: (je as f32, i as f32),
-            mass: mass,
-            .. Default::default()
-        });
-        res.push(Particle{
-            position: (j0 as f32, i as f32 + pg.dy / 2.0),
-            mass: mass,
-            .. Default::default()
-        });
-        res.push(Particle{
-            position: (je as f32, i as f32 + pg.dy / 2.0),
-            mass: mass,
-            .. Default::default()
-        });
-    }
-    for j in j0..je {
-        res.push(Particle{
-            position: (j as f32, i0 as f32),
-            mass: mass,
-            .. Default::default()
-        });
-        res.push(Particle{
-            position: (j as f32, ie as f32),
-            mass: mass,
-            .. Default::default()
-        });
-        res.push(Particle{
-            position: (j as f32 + pg.dx / 2.0, i0 as f32),
-            mass: mass,
-            .. Default::default()
-        });
-        res.push(Particle{
-            position: (j as f32 + pg.dx / 2.0, ie as f32),
-            mass: mass,
-            .. Default::default()
-        });
-    }
-    res.push(Particle{
-        position: (je as f32, ie as f32),
-        mass: mass,
-        .. Default::default()
-    });
-    // res.push(Particle{
-    //     position: (je as f32 - 1.0 + pg.dx / 2.0, ie as f32),
-    //     mass: mass,
-    //     .. Default::default()
-    // });
-    res
-}
+// pub fn get_ghost_box(pg: &PixelGrid, mass: f32, i0: i32, ie: i32, j0: i32, je: i32) -> Vec<Particle> {
+//     let mut res = vec![];
+//     for i in i0..ie {
+//         res.push(Particle{
+//             position: (j0 as f32, i as f32),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//         res.push(Particle{
+//             position: (je as f32, i as f32),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//         res.push(Particle{
+//             position: (j0 as f32, i as f32 + pg.dy / 2.0),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//         res.push(Particle{
+//             position: (je as f32, i as f32 + pg.dy / 2.0),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//     }
+//     for j in j0..je {
+//         res.push(Particle{
+//             position: (j as f32, i0 as f32),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//         res.push(Particle{
+//             position: (j as f32, ie as f32),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//         res.push(Particle{
+//             position: (j as f32 + pg.dx / 2.0, i0 as f32),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//         res.push(Particle{
+//             position: (j as f32 + pg.dx / 2.0, ie as f32),
+//             mass: mass,
+//             .. Default::default()
+//         });
+//     }
+//     res.push(Particle{
+//         position: (je as f32, ie as f32),
+//         mass: mass,
+//         .. Default::default()
+//     });
+//     // res.push(Particle{
+//     //     position: (je as f32 - 1.0 + pg.dx / 2.0, ie as f32),
+//     //     mass: mass,
+//     //     .. Default::default()
+//     // });
+//     res
+// }
 
 pub struct SquareBoundary {
     pub i0: f32,
