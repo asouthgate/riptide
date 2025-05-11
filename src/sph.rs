@@ -476,6 +476,7 @@ mod tests {
             &pc, h, 2
         );
         leapfrog_update_acceleration_ecs(&mut pdata_new);
+        dt = cal_dt_exhaustive(&pdata_new, h, 0.01);
 
         println!("INIT LOOP");
 
@@ -488,7 +489,7 @@ mod tests {
 
         for _ in 0..20 {
             
-            leapfrog_ecs(
+            dt = leapfrog_ecs(
                 &pg, &mut index,
                 &pdata, &mut pdata_new,
                 &pc, dt, h, 5
