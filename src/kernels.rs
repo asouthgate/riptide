@@ -1,35 +1,49 @@
-const PI: f32 = 3.141592653589793;
+//! This module contains kernels for averaging.
+//!
+//! Kernels are functions, generally W(r, h), where r is usually
+//! spatial distance. They are simply averaging functions. They
+//! must integrate to 1, ideally with compact support.
+//!
+//! For cubic splines, see:
+//!    Monaghan, J. (1992). Smoothed Particle Hydrodynamics. Annual Review of Astronomy and Astrophysics.
+//!    Importantly, in different dimensions, the cubic spline has different constants. 
+//!
 
-fn cubic_spline_fac(h: f32) -> f32 {
+
+const PI: f32 = std::f32::consts::PI;
+
+
+/// A constant (depending on h)
+fn cubic_spline_2d_fac(h: f32) -> f32 {
     10.0 / (7.0 * PI * h.powi(2))
 }
 
-pub fn cubic_spline_kernel(r: f32, h: f32) -> f32 {
-    let norm = cubic_spline_fac(h);
+pub fn cubic_spline_2d_kernel(r: f32, h: f32) -> f32 {
+    let norm = cubic_spline_2d_fac(h);
     let q = r / h;
     let fq = match q {
         _q if _q > 2.0 => 0.0,
         _q if _q > 1.0 => 0.25 * (2.0 - q).powi(3),
         _ => 1.0 - 1.5 * q.powi(2) * (1.0 - 0.5 * q)
     };
-    return norm * fq;
+    norm * fq
 }
 
-fn cubic_spline_kernel_dwdq(r: f32, h: f32) -> f32 {
-    let norm = cubic_spline_fac(h);
+fn cubic_spline_2d_kernel_dwdq(r: f32, h: f32) -> f32 {
+    let norm = cubic_spline_2d_fac(h);
     let q = r / h;
     let fq = match q {
         _q if _q > 2.0 => 0.0,
         _q if _q > 1.0 => -0.75 * (2.0 - q).powi(2),
         _ => - 3.0 * q * (1.0 - 0.75 * q)
     };
-    return norm * fq;
+    norm * fq
 }
 
-pub fn cubic_spline_grad(dx: f32, dy: f32, r: f32, h: f32) -> (f32, f32) {
+pub fn cubic_spline_2d_grad(dx: f32, dy: f32, r: f32, h: f32) -> (f32, f32) {
     match r {
         _r if _r > 1e-13 => {
-            let dwdq = cubic_spline_kernel_dwdq(r, h);
+            let dwdq = cubic_spline_2d_kernel_dwdq(r, h);
             let rhinv = 1.0 / (r * h);
             (
                 rhinv * dx * dwdq,
@@ -97,24 +111,24 @@ mod tests {
 
     #[test]
     fn test_kernel() {
-        assert!(cubic_spline_kernel(0.00, 1.0) == 1.0 * cubic_spline_fac(1.0));
-        assert!(cubic_spline_kernel(0.50, 1.0) == 0.71875 * cubic_spline_fac(1.0));
-        assert!(cubic_spline_kernel(1.00, 1.0) == 0.25 * cubic_spline_fac(1.0));
-        assert!(cubic_spline_kernel(1.50, 1.0) == 0.03125 * cubic_spline_fac(1.0));
-        assert!(cubic_spline_kernel(2.00, 1.0) == 0.0);
-        assert!(cubic_spline_kernel(2.01, 1.0) == 0.0);
-        assert!(cubic_spline_kernel(10.0, 1.0) == 0.0);
+        assert!(cubic_spline_2d_kernel(0.00, 1.0) == 1.0 * cubic_spline_2d_fac(1.0));
+        assert!(cubic_spline_2d_kernel(0.50, 1.0) == 0.71875 * cubic_spline_2d_fac(1.0));
+        assert!(cubic_spline_2d_kernel(1.00, 1.0) == 0.25 * cubic_spline_2d_fac(1.0));
+        assert!(cubic_spline_2d_kernel(1.50, 1.0) == 0.03125 * cubic_spline_2d_fac(1.0));
+        assert!(cubic_spline_2d_kernel(2.00, 1.0) == 0.0);
+        assert!(cubic_spline_2d_kernel(2.01, 1.0) == 0.0);
+        assert!(cubic_spline_2d_kernel(10.0, 1.0) == 0.0);
     }
 
     #[test]
-    fn test_cubic_spline_kernel_dwdq_unit_h() {
-        assert!(cubic_spline_kernel_dwdq(0.00, 1.0) == 0.0);
-        assert!(cubic_spline_kernel_dwdq(0.50, 1.0) == -0.9375 * cubic_spline_fac(1.0));
-        assert!(cubic_spline_kernel_dwdq(1.00, 1.0) == -0.75 * cubic_spline_fac(1.0));
-        assert!(cubic_spline_kernel_dwdq(1.50, 1.0) == -0.1875 * cubic_spline_fac(1.0));
-        assert!(cubic_spline_kernel_dwdq(2.00, 1.0) == 0.0);
-        assert!(cubic_spline_kernel_dwdq(2.01, 1.0) == 0.0);
-        assert!(cubic_spline_kernel_dwdq(10.0, 1.0) == 0.0);
+    fn test_cubic_spline_2d_kernel_dwdq_unit_h() {
+        assert!(cubic_spline_2d_kernel_dwdq(0.00, 1.0) == 0.0);
+        assert!(cubic_spline_2d_kernel_dwdq(0.50, 1.0) == -0.9375 * cubic_spline_2d_fac(1.0));
+        assert!(cubic_spline_2d_kernel_dwdq(1.00, 1.0) == -0.75 * cubic_spline_2d_fac(1.0));
+        assert!(cubic_spline_2d_kernel_dwdq(1.50, 1.0) == -0.1875 * cubic_spline_2d_fac(1.0));
+        assert!(cubic_spline_2d_kernel_dwdq(2.00, 1.0) == 0.0);
+        assert!(cubic_spline_2d_kernel_dwdq(2.01, 1.0) == 0.0);
+        assert!(cubic_spline_2d_kernel_dwdq(10.0, 1.0) == 0.0);
     }
 
     #[test]

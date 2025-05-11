@@ -1,6 +1,6 @@
 [package]
 name = "riptide"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 
 [dependencies]
@@ -10,7 +10,3 @@ crossbeam = "0.8"
 [lib]
 name = "riptide"
 path = "src/lib.rs"
-
-[[bin]]
-name = "test_speed"
-path = "src/bin/test_speed.rs"

@@ -1,13 +1,6 @@
 pub mod boundary;
-pub mod fluid_macroscopic_features;
-pub mod fluid_state;
 pub mod kernels;
-pub mod leapfrog;
-pub mod momentum;
-pub mod particle;
-pub mod particle_ecs;
-pub mod particle_index;
-pub mod rigid_body;
 pub mod pixelgrid;
-pub mod pressure;
+pub mod particle_index;
+pub mod particle_ecs;
 pub mod sph;

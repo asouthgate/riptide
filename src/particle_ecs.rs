@@ -19,7 +19,7 @@ pub struct ParticleData {
     pub n_fluid_particles: usize
 }
 
-
+/// A representation of a reference to a particle
 pub struct ParticleRef<'a> {
     pub x: &'a mut (f32, f32),
     pub v: &'a mut (f32, f32),
@@ -49,8 +49,8 @@ impl ParticleData {
             f_body: vec![(0.0, 0.0); n_particles],
             f_surface: vec![(0.0, 0.0); n_particles],
             particle_type: vec![0; n_particles],
-            n_particles: n_particles,
-            n_fluid_particles: n_fluid_particles
+            n_particles,
+            n_fluid_particles
         }
     }
     pub fn get_particle_ref(&mut self, pid: usize) -> ParticleRef {
@@ -85,5 +85,4 @@ mod tests {
         *pref.x = (99.0, -99.0);
         assert!(pd.x[7] == (99.0, -99.0));
     }
-
 }
