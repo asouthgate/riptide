@@ -128,11 +128,43 @@ impl PixelGrid {
         }
     }
 
+    pub fn ij2wxy(&self, i: usize, j: usize) -> (f32, f32) {
+        (
+            self.x + self.w * (j as f32 / self.n as f32),
+            self.y + self.h * (i as f32 / self.m as f32)
+        )
+    }
+
     pub fn ij2ak_nocheck(&self, i: usize, j: usize) -> usize {
         i * self.n + j
     }
 
-    pub fn xy2ak(&self, x: f32, y:f32) -> usize {
+    pub fn in_bounds_wx(&self, x: f32, y: f32) -> bool {
+        let xib = if self.x <= x && x <= self.x + self.w { true } else { false };
+        let yib = if self.y <= y && y <= self.y + self.h { true } else { false };
+        xib && yib
+    }
+
+    pub fn in_bounds(&self, x: f32, y: f32) -> bool {
+        let xib = if 0.0 <= x && x <= self.n as f32 { true } else { false };
+        let yib = if 0.0 <= y && y <= self.m as f32 { true } else { false };
+        xib && yib
+    }
+
+    pub fn assert_in_bounds(&self, wx: &Vec<(f32, f32)>) {
+        for ak in 0..wx.len() {
+            let xval = wx[ak];
+            if !self.in_bounds_wx(xval.0, xval.1) {
+                println!("{} {} {} {} | {} {}", self.x, self.x + self.w, self.y, self.y + self.h, xval.0, xval.1);
+                panic!("Position not in bounds");
+            }
+        }
+    }
+
+    pub fn xy2ak(&self, x: f32, y: f32) -> usize {
+        if !(self.in_bounds(x, y)) {
+            panic!("Attempted to sample point ({}, {}) not in bounds ({}, {})x({}, {})", x, y, self.x, self.x + self.w, self.y, self.y + self.h);
+        }
         let (i, j) = self.xy2ij(x, y).unwrap();
         self.ij2ak_nocheck(i, j)
     }
@@ -181,5 +213,18 @@ mod tests {
         assert_eq!((x, y), (200.0, 200.0));
         (x, y) = pg.worldxy2xy(-100.0, -100.0);
         assert_eq!((x, y), (-200.0, -200.0));
+    }
+
+    #[test]
+    fn test_worldxy2xy_offset() {
+        let pg = PixelGrid::new_with_transform(100, 100, 1.0, 1.0, -50.0, -50.0);
+        let (mut x, mut y) = pg.worldxy2xy(0.0, 0.0);
+        assert_eq!((x, y), (50.0, 50.0));
+        (x, y) = pg.worldxy2xy(10.0, 10.0);
+        assert_eq!((x, y), (60.0, 60.0));
+        (x, y) = pg.worldxy2xy(-10.0, -10.0);
+        assert_eq!((x, y), (40.0, 40.0));
+        (x, y) = pg.worldxy2xy(-10.0, 5.0);
+        assert_eq!((x, y), (40.0, 55.0));
     }
 }

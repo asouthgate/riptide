@@ -146,39 +146,42 @@ mod tests {
         // in this scenario, only two particles; only a few slots have them
         let pg = PixelGrid::new_with_transform(10, 10, 1.0, 1.0, -5.0, -5.0);
 
-        let n_particles = pg.n * pg.m;
+        let np = pg.n - 1;
+        let mp = pg.m - 1;
+
+        let n_particles = np * mp;
         let mut pdata = ParticleData::new(n_particles, n_particles);
 
         // arrange the particles on a grid
-        for i in 0..pg.m {
-            for j in 0..pg.n {
-                pdata.x[i * pg.n + j] = (-5.0 + j as f32 + 0.5, -5.0 + i as f32 + 0.5);
+        for i in 0..mp {
+            for j in 0..np {
+                pdata.x[i * np + j] = (-5.0 + j as f32 + 0.5, -5.0 + i as f32 + 0.5);
             }
         }
+
         let mut index = ParticleIndex::new(&pg, n_particles);
         index.update(&pg, &pdata.x);
         // index.update_neighbors(&pg, &pdata.x, 1);
 
         let nbrs = index.get_nbrs(&pg, -5.0, -5.0);
-        // println!("{} {}: {:?} {:?}", -5.0, -5.0, nbrs, index.neighbors[0]);
         assert!(nbrs.len() == 4);
-        assert!(nbrs == vec![0, 1, 10, 11]);
+        assert!(nbrs == vec![0, 1, np, np + 1]);
         // assert!(nbrs == index.neighbors[0]);
 
         let nbrs = index.get_nbrs(&pg, -5.0, -4.0);
         println!("{} {}: {:?}", -5.0, -4.0, nbrs);
         assert!(nbrs.len() == 6);
-        assert!(nbrs == vec![0, 1, 10, 11, 20, 21]);
+        assert!(nbrs == vec![0, 1, np, np + 1, 2 * np, 2 * np + 1]);
 
         let nbrs: Vec<usize> = index.get_nbrs(&pg, -4.0, -5.0);
         println!("{} {}: {:?}", -4.0, -5.0, nbrs);
         assert!(nbrs.len() == 6);
-        assert!(nbrs == vec![0, 1, 2, 10, 11, 12]);
+        assert!(nbrs == vec![0, 1, 2, np, np + 1, np + 2]);
 
         let nbrs: Vec<usize> = index.get_nbrs(&pg, -4.0, -4.0);
         println!("{} {}: {:?}", -4.0, -4.0, nbrs);
         assert!(nbrs.len() == 9);
-        assert!(nbrs == vec![0, 1, 2, 10, 11, 12, 20, 21, 22]);
+        assert!(nbrs == vec![0, 1, 2, np, np + 1, np + 2, 2 * np, 2 * np + 1, 2 * np + 2]);
 
         // now, move one of the particles to the middle
         pdata.x[0] = (0.5, 0.5);
@@ -215,7 +218,7 @@ mod tests {
             }
         }
         println!("{:?}", res);
-        assert!(res == vec![1, 10, 11]); // 1 was moved
+        assert!(res == vec![1, np, np + 1]); // 1 was moved
 
     }
 } 
