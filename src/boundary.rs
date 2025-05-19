@@ -79,8 +79,22 @@ pub fn collision(pg: &PixelGrid, mask: &Vec<bool>, wx: (f32, f32)) -> bool {
     return pg.sample_world(&mask, wx.0, wx.1);
 }
 
-pub fn enforce_boundary_mask(pg: &PixelGrid, mask: &Vec<bool>, x: &(f32, f32), v: &(f32, f32)) {
-
+pub fn enforce_boundary_mask(
+    pg: &PixelGrid,
+    mask: &Vec<bool>,
+    xprev: &mut Vec<(f32, f32)>,
+    xnext: &mut Vec<(f32, f32)>,
+    vnext: &mut Vec<(f32, f32)>
+) {
+    for pi in 0..xprev.len() {
+        if collision(pg, mask, xnext[pi]) {
+            // TODO: change to proper reflection
+            // 4 cases, quite easy actually
+            xnext[pi] = xprev[pi];
+            vnext[pi].0 = -vnext[pi].0;
+            vnext[pi].1 = -vnext[pi].1;
+        }
+    }
 }
 
 pub fn get_ghost_box(pg: &PixelGrid, i0: i32, ie: i32, j0: i32, je: i32) -> Vec<(f32, f32)> {
@@ -190,6 +204,22 @@ mod tests {
         assert!(!collision(&pg, &mask, (1.5, 1.5)));
         assert!(!collision(&pg, &mask, (1.9, 1.9)));
         assert!(collision(&pg, &mask, (2.1, 1.9)));
+    }
 
+    #[test]
+    fn test_enforce_boundary_collision() {
+        let pg = PixelGrid::new(3, 3);
+        let mask = vec![
+            true, true, true, 
+            true, false, true,
+            true, true, true
+        ];
+        let mut xprev = vec![(1.5, 1.5)];
+        let mut xnext = vec![(0.9, 1.5)];
+        let mut vnext = vec![(1.5, 1.5)];
+
+        assert!(collision(&pg, &mask, xnext[0]));   
+        enforce_boundary_mask(&pg, &mask, &mut xprev, &mut xnext, &mut vnext);
+        assert!(!collision(&pg, &mask, xnext[0]));   
     }
 }
