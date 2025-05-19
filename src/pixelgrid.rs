@@ -71,12 +71,12 @@ impl PixelGrid {
     /// * `wx` - world space x position
     ///
     /// * `wy` world space y position
-    pub fn sample_world(&self, data: &[f32], wx: f32, wy: f32) -> f32 {
+    pub fn sample_world<T: Copy>(&self, data: &[T], wx: f32, wy: f32) -> T {
         let (x, y) = self.worldxy2xy(wx, wy);
         self.sample(data, x, y)
     }
 
-    pub fn sample(&self, data: &[f32], x: f32, y: f32) -> f32 {
+    pub fn sample<T: Copy>(&self, data: &[T], x: f32, y: f32) -> T {
         data[self.xy2ak(x, y)]
     }
 
